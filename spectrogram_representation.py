@@ -685,8 +685,8 @@ class spectrograms():
 # Takes some time to initialize the image encodings.
 		
 outfolder           = 'results_temp'
-specs_folder        = '../modes_detector/dataset/spectrograms_color/'
-heat_type_file      = '../DATA/20200630_list_5000_with_NBI_scenario.csv'	
+specs_folder        = 'data'
+heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'	
 specs               = spectrograms(outfolder, specs_folder, heat_type_file)
 specs.num_clusters  = [2,3,4,5] #,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]	
 
