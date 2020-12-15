@@ -39,26 +39,25 @@ class spectrograms():
 	"""
 	def __init__(self, outfolder, specs_folder, heat_type_file, pca_comp=-1):
 		
-		self.outfolder=outfolder
+		self.outfolder    = outfolder
 		self.specs_folder = specs_folder
-		self.specs = glob.glob(os.path.join(self.specs_folder, '*png'))
+		self.specs        = glob.glob(os.path.join(self.specs_folder, '*png'))
         
 		if not os.path.exists(outfolder):
 			os.mkdir(outfolder)			
 		
 		#load the encoder
-		img_input, levels = get_vgg_encoder(input_height=257,  input_width=368)    #(7, 7, 512)
-		#img_input, levels = get_resnet50_encoder() #(7, 7, 2048)
-		output = levels[-1]
-		model  = Model(img_input, output)
-		model.output_width = model.output_shape[2]
+		img_input, levels   = get_vgg_encoder(input_height=257,  input_width=368) 
+		output              = levels[-1]
+		model               = Model(img_input, output)
+		model.output_width  = model.output_shape[2]
 		model.output_height = model.output_shape[1]
-		model.model_name = "spectrogram_encoder"
-		self.model=model
+		model.model_name    = "spectrogram_encoder"
+		self.model          = model
 		print(model.summary())
 
 		# loop over the spectrograms and calculate representation
-		self.Xraw = []
+		self.Xraw         = []
 		self.shot_numbers = []#to save data in a dataframe
 		for i, f in enumerate(self.specs):
 			if (i %25==0):
@@ -69,9 +68,10 @@ class spectrograms():
 			self.Xraw.append(out.flatten())
 			self.shot_numbers.append(f[-9:-4])
 
-		
+
+                # apply or not PCA
 		if (pca_comp > 1):
-			pca = PCA(n_components=pca_comp)
+			pca    = PCA(n_components=pca_comp)
 			pca.fit(self.Xraw)
 			self.X = pca.transform(self.Xraw)
 		else:
@@ -81,9 +81,9 @@ class spectrograms():
 		print('Dimensions of the image encoding: ', self.Xraw[0].shape)		
 
 		
-		self.X_embedded = TSNE(n_components=2).fit_transform(self.X)  #2D embedding
+		self.X_embedded   = TSNE(n_components=2).fit_transform(self.X)  #2D embedding
 		
-		self.num_clusters = [1,2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40]#,44,48,52,56,60,64,68,72,76,80,100,120]	
+		self.num_clusters = [1,2,3,4,6,8,10,12,16,20,24,28,32,36,40]
 
 		#To make multiplots in a w*w grid
 		self.w = 5
@@ -123,7 +123,7 @@ class spectrograms():
 
 	def spec_kmeans(self, outfolder, sel_nc=4):
 		"""
-		Kemans clustering over the data self.X. For each number of clusters
+		Kmeans clustering over the data self.X. For each number of clusters
 		we plot the corresponding tSNE with the points colored according to
 		cluster membership.
 		
