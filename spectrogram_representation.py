@@ -28,6 +28,7 @@ import random
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from sklearn.decomposition import PCA
+from sklearn.metrics.cluster import adjusted_rand_score
 from som.som import SOM
 
 
@@ -217,17 +218,22 @@ class spectrograms():
         outfolder = os.path.join(self.outfolder,outfolder)
         if not os.path.exists(outfolder):
             os.mkdir(outfolder)
-    
+        cont = 0
         for nc in self.num_clusters:
             # Build a ncx1 SOM 
             print('Clustering in ' + str(nc) + ' clusters')
             som = SOM(m=nc, n=1, dim=self.X[0].shape[0])
             
             # Fit it to the data
-            som.fit(self.X)
+            som.fit(self.X, epochs=2)
             
             # Assign each datapoint to its predicted cluster
             clusters = som.predict(self.X)
+            print(clusters)
+            clusters = self.clean_cluster(clusters,nc)
+            print(clusters)
+            
+            all_clusters_som.append(clusters)
             
             df           = pd.DataFrame()
             df['shot']   = self.shot_numbers
@@ -270,6 +276,7 @@ class spectrograms():
                 plt.savefig(outpath)
                 plt.clf()
                 fig=None
+            cont +=1
     
                 
         self.save_shape_dict(outfolder, self.shape_dict)
@@ -739,6 +746,36 @@ class spectrograms():
         plt.clf()
         plt.cla()
         fig=None
+        
+    def rand_index(self, cluster1, cluster2):
+        '''
+        Computes a similarity measure between two clusterings by considering all 
+        pairs of samples and counting pairs that are assigned in the same or 
+        different clusters in the predicted and true clusterings.
+        '''
+        return adjusted_rand_score(cluster1, cluster2)
+    
+    def clean_cluster(self, cluster, cluster_size):
+        '''
+        Function used to transform a cluster to its "basic form". For example,
+        [3,3,2,3,2] is equivalent to [0,0,1,0,1]
+        '''
+        order_by_cluster = {}
+        new_cluster=np.zeros((len(cluster),), dtype=int)
+        order = []
+        for i in range(cluster_size):
+            order_by_cluster[i]=[] #create a dictionary with every cluster as key
+        
+        for i in range(len(cluster)):
+            order_by_cluster[cluster[i]].append(i) #insert positions of every cluster
+            if (cluster[i] not in order):
+                order.append(cluster[i]) #order of appearance of clusters
+        
+        for i in range(len(order)):
+            for pos in order_by_cluster[order[i]]:
+                new_cluster[pos]=i #create new cluster
+
+        return new_cluster
 
 #####################################################################
 
@@ -752,20 +789,31 @@ class spectrograms():
 
 # Takes some time to initialize the image encodings.
         
-outfolder           = 'results_test'
-specs_folder        = '../dataset_dummy'
+outfolder           = '../results_test'
+specs_folder        = '../../dataset_dummy'
 heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'    
 pca_comp            = 20
 specs               = spectrograms(outfolder, specs_folder, heat_type_file)#, pca_comp)
-specs.num_clusters  = [2] #,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]    
+specs.num_clusters  = [2,3,4,5] #,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
+all_clusters_som = [] 
 
 
 # Now we do the work, clustering and/or applying PCA
 
 #specs.spec_kmeans('KMeans_noPCA')
+
 specs.spec_som('SOM_noPCA')
-plt.close('all')
-# specs.spec_som('SOM_PCA_' + str(pca_comp))
+#specs.spec_som('SOM_PCA_' + str(pca_comp))
+plt.close('all') #to close all opened figures during the execution
+
+if (len(all_clusters_som) > 1):
+    for i in range(len(specs.num_clusters)):
+        for j in range(i,len(specs.num_clusters)):
+            if (i!=j):
+                rand=specs.rand_index(all_clusters_som[i],all_clusters_som[j])
+                print('Rand index between ' + str(specs.num_clusters[i]) + ' clusters and ' + str(specs.num_clusters[j]) + ' clusters: ' + str(round(rand,3)))
+else:
+    print('Only one cluster, cant compute Rand index')
 # specs.spec_kmedoids('KMedoids_noPCA')
 # specs.spec_agglomerative('Agglomerative_noPCA')
 # specs.spec_DBSCAN('DBSCAN_noPCA', epsilon=0.72857) #len(specs.Xraw[0])/1000)
