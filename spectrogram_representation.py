@@ -29,7 +29,9 @@ import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from sklearn.decomposition import PCA
 from sklearn.metrics.cluster import adjusted_rand_score
-from som.som import SOM
+from tempfile import TemporaryFile
+import pickle
+from som import SOM
 
 
 class spectrograms():
@@ -61,14 +63,16 @@ class spectrograms():
         # loop over the spectrograms and calculate representation
         self.Xraw         = []
         self.shot_numbers = []#to save data in a dataframe
-        for i, f in enumerate(self.specs):
-            if (i %25==0):
-                print('Encoding spectrograms: ', float(i)/len(self.specs)*100, ' %') 
-            img = np.array([cv2.imread(f)])[0]/255.
-            img = cv2.resize( img, (model.input_shape[2], model.input_shape[1]), interpolation=cv2.INTER_NEAREST)
-            out = model.predict_on_batch([[img]])[0]
-            self.Xraw.append(out.flatten())
-            self.shot_numbers.append(f[-9:-4])
+        
+        (model, self.Xraw, shot_numbers) = self.compute_or_load_VGG(model, action, filename)
+#        for i, f in enumerate(self.specs):
+#            if (i %25==0):
+#                print('Encoding spectrograms: ', float(i)/len(self.specs)*100, ' %') 
+#            img = np.array([cv2.imread(f)])[0]/255.
+#            img = cv2.resize( img, (model.input_shape[2], model.input_shape[1]), interpolation=cv2.INTER_NEAREST)
+#            out = model.predict_on_batch([[img]])[0]
+#            self.Xraw.append(out.flatten())
+#            self.shot_numbers.append(f[-9:-4])
 
 
         # apply or not PCA
@@ -78,6 +82,7 @@ class spectrograms():
             self.X = pca.transform(self.Xraw)
         else:
             self.X = self.Xraw
+
 
         print('\nDimensions of the model input: ', model.input_shape[2]* model.input_shape[1]*model.input_shape[3])
         print('Dimensions of the image encoding: ', self.Xraw[0].shape)        
@@ -95,7 +100,8 @@ class spectrograms():
                 'ECH+NBI2':'v','Both NBI start-up':'o',
                 'NBI1 start-up':'*','NBI2 start-up':'+', 
                 'No NBI plasma. No AE':'s'}        
-        self.type = []
+        self.type = []         
+        
         '''
         df = pd.read_csv(heat_type_file, index_col='shot_WDIA')
 
@@ -154,6 +160,7 @@ class spectrograms():
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
 
+            np.savez(dest_folder + '/' + saving_clusters, clusters)
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
             df['cluster'] = clusters
             df.sort_values(by='shot',inplace=True)                        
@@ -218,7 +225,8 @@ class spectrograms():
         outfolder = os.path.join(self.outfolder,outfolder)
         if not os.path.exists(outfolder):
             os.mkdir(outfolder)
-        cont = 0
+        inertias = []
+        
         for nc in self.num_clusters:
             # Build a ncx1 SOM 
             print('Clustering in ' + str(nc) + ' clusters')
@@ -226,12 +234,11 @@ class spectrograms():
             
             # Fit it to the data
             som.fit(self.X, epochs=2)
+            inertias.append(som._inertia_)
             
             # Assign each datapoint to its predicted cluster
             clusters = som.predict(self.X)
-            print(clusters)
             clusters = self.clean_cluster(clusters,nc)
-            print(clusters)
             
             all_clusters_som.append(clusters)
             
@@ -239,10 +246,11 @@ class spectrograms():
             df['shot']   = self.shot_numbers
             df['Nc='+str(nc)] = clusters
 
-            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters_som' )
+            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters' )
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
             
+            np.savez(dest_folder + '/' + saving_clusters, clusters)
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
             df['cluster'] = clusters
             df.sort_values(by='shot',inplace=True)                        
@@ -276,10 +284,9 @@ class spectrograms():
                 plt.savefig(outpath)
                 plt.clf()
                 fig=None
-            cont +=1
     
-                
         self.save_shape_dict(outfolder, self.shape_dict)
+        self.plot_elbow(inertias, outfolder)
         
     def spec_kmedoids(self, outfolder, sel_nc=4):
         """
@@ -747,17 +754,38 @@ class spectrograms():
         plt.cla()
         fig=None
         
-    def rand_index(self, cluster1, cluster2):
+            
+    def compute_or_load_VGG(self, model, action, filename):
         '''
-        Computes a similarity measure between two clusterings by considering all 
-        pairs of samples and counting pairs that are assigned in the same or 
-        different clusters in the predicted and true clusterings.
+        Depending on the action input ('compute' or 'load'), a VGG embedding is
+        computed and saved o loaded. The file name for saving or loading is also
+        an input, no extension needed.
         '''
-        return adjusted_rand_score(cluster1, cluster2)
-    
+        X = []
+        shot_numbers = []
+        if (action == 'compute'):
+            for i, f in enumerate(self.specs):
+                if (i %25==0):
+                    print('Encoding spectrograms: ', float(i)/len(self.specs)*100, ' %') 
+                img = np.array([cv2.imread(f)])[0]/255.
+                img = cv2.resize( img, (model.input_shape[2], model.input_shape[1]), interpolation=cv2.INTER_NEAREST)
+                out = model.predict_on_batch([[img]])[0]
+                X.append(out.flatten())
+                shot_numbers.append(f[-9:-4])
+                
+            with open(filename+'.pkl', 'wb') as f:  #save variables
+                pickle.dump([model,X,shot_numbers], f)
+
+        elif (action == 'load'):
+            print('...Using saved data...')
+            with open(filename+'.pkl','rb') as f: # load saved specs
+                [model,X,shot_numbers] = pickle.load(f)
+            
+        return (model, X, shot_numbers)
+            
     def clean_cluster(self, cluster, cluster_size):
         '''
-        Function used to transform a cluster to its "basic form". For example,
+        Function used to transform a clustering to its "canonical form". For example,
         [3,3,2,3,2] is equivalent to [0,0,1,0,1]
         '''
         order_by_cluster = {}
@@ -776,7 +804,31 @@ class spectrograms():
                 new_cluster[pos]=i #create new cluster
 
         return new_cluster
+    
+    def rand_index(self, cluster1, cluster2):
+        '''
+        Computes a similarity measure between two clusterings by considering all 
+        pairs of samples and counting pairs that are assigned in the same or 
+        different clusters in two given clusterings.
+        '''
+        return adjusted_rand_score(cluster1, cluster2)
+    
 
+    def compare_saved_clusters(self, path1, path2, cluster_sizes):
+        '''
+        This function is used to compare two different clusterings using Rand index.
+        These clusterings are saved in .npz files in different folders depending on
+        the algorithm used.
+        '''
+        for size in cluster_sizes:
+            subpath = '/Nc_'+str(size).zfill(2)+'_clusters/'
+            clusters1 = np.load(path1 + subpath + saving_clusters)
+            clusters2 = np.load(path2 + subpath + saving_clusters)
+            rand = self.rand_index(clusters1['arr_0'],clusters2['arr_0'])
+            print('Rand index when ' + str(size) + ' clusters: ' + str(round(rand,3)))
+
+            
+            
 #####################################################################
 
 #  Input parameters and execution.
@@ -788,37 +840,36 @@ class spectrograms():
 # wanna use.
 
 # Takes some time to initialize the image encodings.
-        
-outfolder           = '../results_test'
-specs_folder        = '../../dataset_dummy'
+filename = 'data'    
+outfolder           = '../results_test_data'
+specs_folder        = '../../' + filename
 heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'    
-pca_comp            = 20
-specs               = spectrograms(outfolder, specs_folder, heat_type_file)#, pca_comp)
-specs.num_clusters  = [2,3,4,5] #,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
+pca_comp            = 490
+folder = 'SOM_noPCA'
 all_clusters_som = [] 
+saving_clusters = 'clusters.npz'
 
+action = 'load' # 'compute' or 'load' VGG embedding
+
+specs               = spectrograms(outfolder, specs_folder, heat_type_file)#☺, pca_comp)
+specs.num_clusters  = [2,3,4,5]#,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
 
 # Now we do the work, clustering and/or applying PCA
 
-#specs.spec_kmeans('KMeans_noPCA')
-
-specs.spec_som('SOM_noPCA')
-#specs.spec_som('SOM_PCA_' + str(pca_comp))
+specs.spec_som(folder)
+#specs.spec_som('SOM_PCA' + str(pca_comp))
 plt.close('all') #to close all opened figures during the execution
-
-if (len(all_clusters_som) > 1):
-    for i in range(len(specs.num_clusters)):
-        for j in range(i,len(specs.num_clusters)):
-            if (i!=j):
-                rand=specs.rand_index(all_clusters_som[i],all_clusters_som[j])
-                print('Rand index between ' + str(specs.num_clusters[i]) + ' clusters and ' + str(specs.num_clusters[j]) + ' clusters: ' + str(round(rand,3)))
-else:
-    print('Only one cluster, cant compute Rand index')
+    
+#specs.spec_kmeans('KMeans_noPCA')
 # specs.spec_kmedoids('KMedoids_noPCA')
 # specs.spec_agglomerative('Agglomerative_noPCA')
 # specs.spec_DBSCAN('DBSCAN_noPCA', epsilon=0.72857) #len(specs.Xraw[0])/1000)
 # np.savetxt(os.path.join(outfolder, "spectrograms_encoded_RAW.csv"), specs.Xraw, delimiter=",")
 
+# To compute Rand index between two saved clusters
+path1 = outfolder + '/KMeans_noPCA' #folder of the first clustering
+path2 = outfolder + '/SOM_noPCA'    #folder of the second clustering
+specs.compare_saved_clusters(path1,path2,specs.num_clusters)
 
 # specs.make_similarity_graph('Graph_cosine_noPCA')
 # specs.make_similarity_graph('Graph_euclidean_noPCA', metric='euclidean')
