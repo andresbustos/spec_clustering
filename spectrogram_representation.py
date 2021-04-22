@@ -28,11 +28,12 @@ import random
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 from sklearn.decomposition import PCA
-from sklearn.metrics.cluster import adjusted_rand_score
+from sklearn.metrics.cluster import rand_score
 from tempfile import TemporaryFile
 import pickle
 from som import SOM
-
+from timeit import default_timer as timer
+from math import floor
 
 class spectrograms():
     """
@@ -88,8 +89,7 @@ class spectrograms():
         print('Dimensions of the image encoding: ', self.Xraw[0].shape)        
 
         
-        self.X_embedded   = TSNE(n_components=2).fit_transform(self.X)  #2D embedding
-        
+        #self.X_embedded   = TSNE(n_components=2).fit_transform(self.X)  #2D embedding
         self.num_clusters = [1,2,3,4,6,8,10,12,16,20,24,28,32,36,40]
 
         #To make multiplots in a w*w grid
@@ -226,21 +226,19 @@ class spectrograms():
         if not os.path.exists(outfolder):
             os.mkdir(outfolder)
         inertias = []
-        
+        print("...checkpoint...")
         for nc in self.num_clusters:
             # Build a ncx1 SOM 
             print('Clustering in ' + str(nc) + ' clusters')
-            som = SOM(m=nc, n=1, dim=self.X[0].shape[0])
+            som = SOM(m=5, n=3, dim=self.X[0].shape[0])
             
             # Fit it to the data
-            som.fit(self.X, epochs=2)
+            som.fit(self.X, epochs=2, initiate=initialitation)
             inertias.append(som._inertia_)
             
             # Assign each datapoint to its predicted cluster
             clusters = som.predict(self.X)
-            clusters = self.clean_cluster(clusters,nc)
-            
-            all_clusters_som.append(clusters)
+#            clusters = self.clean_cluster(clusters,nc)
             
             df           = pd.DataFrame()
             df['shot']   = self.shot_numbers
@@ -284,6 +282,7 @@ class spectrograms():
                 plt.savefig(outpath)
                 plt.clf()
                 fig=None
+            plt.close('all') #to close all opened figures during the execution0
     
         self.save_shape_dict(outfolder, self.shape_dict)
         self.plot_elbow(inertias, outfolder)
@@ -811,7 +810,7 @@ class spectrograms():
         pairs of samples and counting pairs that are assigned in the same or 
         different clusters in two given clusterings.
         '''
-        return adjusted_rand_score(cluster1, cluster2)
+        return rand_score(cluster1, cluster2)
     
 
     def compare_saved_clusters(self, path1, path2, cluster_sizes):
@@ -826,6 +825,7 @@ class spectrograms():
             clusters2 = np.load(path2 + subpath + saving_clusters)
             rand = self.rand_index(clusters1['arr_0'],clusters2['arr_0'])
             print('Rand index when ' + str(size) + ' clusters: ' + str(round(rand,3)))
+            return rand
 
             
             
@@ -840,36 +840,71 @@ class spectrograms():
 # wanna use.
 
 # Takes some time to initialize the image encodings.
-filename = 'data'    
-outfolder           = '../results_test_data'
+            
+# Parameters to define the folder name depending on the initialitation and wether
+# or not we use PCA 
+filename            = 'spectrograms'  
+initialitation      = 'random' # 'random' or 'pca'    
+pca_comp            = -1      # number of components of the pca, -1 if no PCA
+ini_file            = ''
+pca_file            = 'noPCA'
+if (initialitation == 'pca'):
+    ini_file = 'initial'
+if (pca_comp != -1):
+    pca_file = 'PCA'+str(pca_comp)
+folder              = 'SOM_'+pca_file+ini_file
+outfolder           = '../results_test_'+filename
 specs_folder        = '../../' + filename
-heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'    
-pca_comp            = 490
-folder = 'SOM_noPCA'
-all_clusters_som = [] 
-saving_clusters = 'clusters.npz'
+
+heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'   
+saving_clusters     = 'clusters.npz' #file where the clustering will be saved
 
 action = 'load' # 'compute' or 'load' VGG embedding
 
-specs               = spectrograms(outfolder, specs_folder, heat_type_file)#☺, pca_comp)
-specs.num_clusters  = [2,3,4,5]#,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
-
 # Now we do the work, clustering and/or applying PCA
 
-specs.spec_som(folder)
-#specs.spec_som('SOM_PCA' + str(pca_comp))
-plt.close('all') #to close all opened figures during the execution
+components = [2400,2900,3400,3900,4400,4900,5400,5900,6400,6900,7400,7900]#,8400,8900] compute PCA before SOM using i components
+rand_indexes = []
+for i in components:
+    total_time = 0
+    start = timer()
+    pca_comp = i      # number of components of the pca, -1 if no PCA
+    pca_file = 'noPCA'
+    if (pca_comp != -1):
+        pca_file = 'PCA'+str(pca_comp)
+    folder              = 'SOM_'+pca_file+ini_file
+    outfolder           = '../results_test_'+filename
+    specs_folder        = '../../' + filename
+    action = 'load' # 'compute' or 'load' VGG embedding
+    specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp)
+    specs.num_clusters  = [15]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
+ 
+    specs.spec_som(folder)
+    end = timer()
+    total_time += (end - start) 
+    plt.close('all') 
+    print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
     
+    # Compute rand index using clusterings from paths 1 and 2
+    path1 = outfolder + '/SOM_noPCA' #folder of the first clustering
+    path2 = outfolder + '/'+folder    #folder of the second clustering
+    rand_indexes.append(specs.compare_saved_clusters(path1,path2,specs.num_clusters))
+
+
+plt.close('all') #to close all opened figures during the execution
 #specs.spec_kmeans('KMeans_noPCA')
 # specs.spec_kmedoids('KMedoids_noPCA')
 # specs.spec_agglomerative('Agglomerative_noPCA')
 # specs.spec_DBSCAN('DBSCAN_noPCA', epsilon=0.72857) #len(specs.Xraw[0])/1000)
 # np.savetxt(os.path.join(outfolder, "spectrograms_encoded_RAW.csv"), specs.Xraw, delimiter=",")
 
-# To compute Rand index between two saved clusters
-path1 = outfolder + '/KMeans_noPCA' #folder of the first clustering
-path2 = outfolder + '/SOM_noPCA'    #folder of the second clustering
-specs.compare_saved_clusters(path1,path2,specs.num_clusters)
+
+############## To compute Rand index between two saved clusters ##############
+
+# folder options: KMeans_noPCA, SOM_noPCA, SOM_PCA490, SOM_noPCAinitial, ...
+path1 = outfolder + '/SOM_noPCA' #folder of the first clustering
+path2 = outfolder + '/Kmeans_noPCA'    #folder of the second clustering
+#specs.compare_saved_clusters(path1,path2,specs.num_clusters)
 
 # specs.make_similarity_graph('Graph_cosine_noPCA')
 # specs.make_similarity_graph('Graph_euclidean_noPCA', metric='euclidean')

@@ -7,6 +7,7 @@ Created: 1-27-21
 """
 
 import numpy as np
+from sklearn.decomposition import PCA
 
 class SOM():
     """
@@ -42,10 +43,6 @@ class SOM():
         self.sigma = sigma
         self.max_iter = max_iter
 
-        # Initialize weights
-        self.weights = np.random.normal(size=(m * n, dim))
-        self._locations = self._get_locations(m, n)
-
         # Set after fitting
         self._inertia = None
         self._n_iter_ = None
@@ -56,7 +53,71 @@ class SOM():
         Return the indices of an m by n array.
         """
         return np.argwhere(np.ones(shape=(m, n))).astype(np.int64)
+    
+    def _pca_linear_initialization(self, data):
+        """
+        We initialize the map, just by using the first two first eigen vals and
+        eigenvectors
+        Further, we create a linear combination of them in the new map by
+        giving values from -1 to 1 in each
+        X = UsigmaWT
+        XTX = Wsigma^2WT
+        T = XW = Usigma
+        // Transformed by W EigenVector, can be calculated by multiplication
+        // PC matrix by eigenval too
+        // Further, we can get lower ranks by using just few of the eigen
+        // vevtors
+        T(2) = U(2)sigma(2) = XW(2) ---> 2 is the number of selected
+        eigenvectors
+        (*) Note that 'X' is the covariance matrix of original data
+        :param data: data to use for the initialization
+        :returns: initialized matrix with same dimension as input data
+        """
+        cols = self.n
+        coord = None
+        pca_components = None
+        
+        nnodes = self.m*self.n
 
+        if np.min([self.m, self.n]) > 1:
+            coord = np.zeros((nnodes, 2))
+            pca_components = 2
+
+            for i in range(0, nnodes):
+                coord[i, 0] = int(i / cols)  # x
+                coord[i, 1] = int(i % cols)  # y
+
+        elif np.min([self.m, self.n]) == 1:
+            coord = np.zeros((nnodes, 1))
+            pca_components = 1
+
+            for i in range(0, nnodes):
+                coord[i, 0] = int(i % cols)  # y
+
+        mx = np.max(coord, axis=0)
+        mn = np.min(coord, axis=0)
+        coord = (coord - mn)/(mx-mn)
+        coord = (coord - .5)*2
+        me = np.mean(data, 0)
+        data = (data - me)
+        tmp_matrix = np.tile(me, (nnodes, 1))
+
+        # Randomized PCA is scalable
+        #pca = RandomizedPCA(n_components=pca_components) # RandomizedPCA is deprecated.
+        pca = PCA(n_components=pca_components, svd_solver='randomized')
+
+        pca.fit(data)
+        eigvec = pca.components_
+        eigval = pca.explained_variance_
+        norms = np.sqrt(np.einsum('ij,ij->i', eigvec, eigvec))
+        eigvec = ((eigvec.T/norms)*eigval).T
+
+        for j in range(nnodes):
+            for i in range(eigvec.shape[0]):
+                tmp_matrix[j, :] = tmp_matrix[j, :] + coord[j, i]*eigvec[i, :]
+
+        return np.around(tmp_matrix, decimals=6)
+        
     def _find_bmu(self, x):
         """
         Find the index of the best matching unit for the input vector x.
@@ -109,7 +170,7 @@ class SOM():
         # Compute sum of squared distance (just euclidean distance) from x to bmu
         return np.sum(np.square(x - bmu))
 
-    def fit(self, X, epochs=1, shuffle=True):
+    def fit(self, X, epochs=1, initiate='random',shuffle=True):
         """
         Take data (a tensor of type float64) as input and fit the SOM to that
         data for the specified number of epochs.
@@ -121,6 +182,9 @@ class SOM():
             of training samples.
         epochs : int, default=1
             The number of times to loop through the training data when fitting.
+        initiate : string, default='random'
+            Whether or not to initiate the initial weights randomly or with pca
+            initialitation
         shuffle : bool, default True
             Whether or not to randomize the order of train data when fitting.
             Can be seeded with np.random.seed() prior to calling fit.
@@ -130,8 +194,15 @@ class SOM():
         None
             Fits the SOM to the given data but does not return anything.
         """
+        
+        # Initialize weights
+        if (initiate == 'random'):
+            self.weights = np.random.normal(size=(self.m * self.n, self.dim))
+        elif (initiate == 'pca'):
+            self.weights = self._pca_linear_initialization(X)
+        self._locations = self._get_locations(self.m, self.n)
+        
         # Count total number of iterations
-        data = X
         global_iter_counter = 0
         n_samples = len(X)
         total_iterations = np.minimum(epochs * n_samples, self.max_iter)
@@ -151,7 +222,7 @@ class SOM():
                 # Break if past max number of iterations
                 if global_iter_counter > self.max_iter:
                     break
-                input = data[idx]
+                input = X[idx]
                 # Do one step of training
                 self.step(input)
                 # Update learning rate
@@ -159,7 +230,7 @@ class SOM():
                 self.lr = (1 - (global_iter_counter / total_iterations)) * self.initial_lr
 
         # Compute inertia
-        inertia = np.sum(np.array([float(self._compute_point_intertia(x)) for x in data]))
+        inertia = np.sum(np.array([float(self._compute_point_intertia(x)) for x in X]))
         self._inertia_ = inertia
 
         # Set n_iter_ attribute
