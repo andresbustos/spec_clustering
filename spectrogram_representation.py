@@ -16,6 +16,8 @@ import numpy as np
 import sklearn.cluster
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+import matplotlib.colorbar as cbar
 import pandas as pd
 from sklearn_extra.cluster import KMedoids
 from numpy.linalg import norm
@@ -91,24 +93,24 @@ class spectrograms():
                 pca    = PCA(n_components=pca_comp)
                 pca.fit(self.Xraw)
                 self.X = pca.transform(self.Xraw)
-                with open(filename+str(pca_comp)+'PCA.pkl', 'wb') as f:  #save variables
+                with open('reductions/'+filename+str(pca_comp)+'PCA.pkl', 'wb') as f:  #save variables
                     pickle.dump(self.X, f)
             else:
                 print('...Using saved data for PCA...')
-                with open(filename+str(pca_comp)+'PCA.pkl','rb') as f: # load saved specs
+                with open('reductions/'+filename+str(pca_comp)+'PCA.pkl','rb') as f: # load saved specs
                     self.X = pickle.load(f)
+        # apply or not SVD
         elif (svd_comp > 1):
             if (actionSVD == 'compute'):
                 self.X=self.svd_decomposition(self.Xraw,svd_comp)
-                with open(filename+str(svd_comp)+'SVD.pkl', 'wb') as f:  #save variables
+                with open('reductions/'+filename+str(svd_comp)+'SVD.pkl', 'wb') as f:  #save variables
                     pickle.dump(self.X, f)
             else:
                 print('...Using saved data for SVD...')
-                with open(filename+str(svd_comp)+'SVD.pkl','rb') as f: # load saved specs
+                with open('reductions/'+filename+str(svd_comp)+'SVD.pkl','rb') as f: # load saved specs
                     self.X = pickle.load(f)
         else:
             self.X = self.Xraw
-
 
         print('\nDimensions of the model input: ', model.input_shape[2]* model.input_shape[1]*model.input_shape[3])
         print('Dimensions of the image encoding: ', self.Xraw[0].shape)        
@@ -157,7 +159,7 @@ class spectrograms():
             f.write(k +'\t' + d[k]+'\n')
         f.close()
 
-    def spec_kmeans(self, outfolder, sel_nc=4):
+    def spec_kmeans(self, outfolder, n_it, sel_nc=4):
         """
         Kmeans clustering over the data self.X. For each number of clusters
         we plot the corresponding tSNE with the points colored according to
@@ -181,7 +183,7 @@ class spectrograms():
             inertias.append(alg.inertia_)
             df['Nc='+str(nc)] = clusters
             
-            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters' )
+            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters'+str(n_it) )
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
 
@@ -243,7 +245,7 @@ class spectrograms():
 #        clusters = kmeans.predict(self.X)
 #        self.distribute_pictures(outfolder, sel_nc, clusters)
 #
-    def spec_som(self, outfolder, sel_nc=4):
+    def spec_som(self, outfolder, n_it, sel_nc=4):
         '''
         SOM clustering over the data self.X. 
         '''
@@ -268,7 +270,7 @@ class spectrograms():
             df['shot']   = self.shot_numbers
             df['Nc='+str(nc)] = clusters
 
-            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters' )
+            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters'+str(n_it) )
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
             
@@ -311,7 +313,7 @@ class spectrograms():
         self.save_shape_dict(outfolder, self.shape_dict)
         self.plot_elbow(inertias, outfolder)
         
-    def spec_kmedoids(self, outfolder, sel_nc=4):
+    def spec_kmedoids(self, outfolder, n_it, sel_nc=4):
         """
         Kmedoidss clustering over the data self.X. For each number of clusters
         we plot the corresponding tSNE with the points colored according to
@@ -335,10 +337,11 @@ class spectrograms():
             inertias.append(alg.inertia_)
             df['Nc='+str(nc)] = clusters
             
-            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters' )
+            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters'+str(n_it) )
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
-            
+                
+            np.savez(dest_folder + '/' + saving_clusters, clusters)
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
             df = pd.DataFrame(columns=['shot','cluster'])
             df['cluster'] = clusters
@@ -383,6 +386,7 @@ class spectrograms():
             
             
             #for each cluster, make a summary plot of w*w spectrograms
+            '''
             shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
             cmap = plt.get_cmap('rainbow')
             norm = Normalize(vmin=0, vmax=max(clusters))
@@ -392,6 +396,7 @@ class spectrograms():
             plt.title('Nc = ' + str(nc))
             plt.savefig(os.path.join(dest_folder,'tSNE_Kmedoids_'+str(nc).zfill(3)+'.png'))
             plt.clf()        
+            '''
         self.save_shape_dict(outfolder, self.shape_dict)
 
         self.plot_elbow(inertias, outfolder)
@@ -454,7 +459,7 @@ class spectrograms():
             plt.clf()
             fig=None
 
-    def spec_agglomerative(self, outfolder, sel_nc=4):
+    def spec_agglomerative(self, outfolder, n_it, sel_nc=4):
         """
         Agglomerative clustering over the data self.X. For each number of clusters
         we plot the corresponding tSNE with the points colored according to
@@ -474,11 +479,12 @@ class spectrograms():
 #            clusters = alg.predict(self.X)
             df['Nc='+str(nc)] = clusters
             
-            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters' )
+            dest_folder =  os.path.join(outfolder, 'Nc_'+str(nc).zfill(2)+'_clusters'+str(n_it) )
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
 
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
+            np.savez(dest_folder + '/' + saving_clusters, clusters)
             df['cluster'] = clusters
             df.sort_values(by='shot',inplace=True)                                        
             df.to_csv(os.path.join(dest_folder,'membership.csv'), index=None)
@@ -519,6 +525,7 @@ class spectrograms():
 #            plt.clf()
             
             #for each cluster, make a summary plot of w*w spectrograms
+            '''
             shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
             cmap = plt.get_cmap('rainbow')
             norm = Normalize(vmin=0, vmax=max(clusters))
@@ -530,6 +537,7 @@ class spectrograms():
             plt.clf()        
             plt.cla()
             fig=None
+            '''
         self.save_shape_dict(outfolder, self.shape_dict)
 
 
@@ -556,6 +564,7 @@ class spectrograms():
         if not os.path.exists(dest_folder):
             os.mkdir(dest_folder)
 
+        np.savez(dest_folder + '/' + saving_clusters, clusters)
         self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
         df['cluster'] = clusters
         df.sort_values(by='shot',inplace=True)                                        
@@ -593,6 +602,7 @@ class spectrograms():
             
             
             #for each cluster, make a summary plot of w*w spectrograms
+            '''
             shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
 
             fig = plt.figure(dpi=200)
@@ -603,6 +613,7 @@ class spectrograms():
             plt.clf()        
             plt.cla()
             fig=None
+            '''
         self.save_shape_dict(outfolder, self.shape_dict)
 
 
@@ -777,16 +788,27 @@ class spectrograms():
         plt.cla()
         fig=None
         
-    def svd_decomposition(self,X,svd_comp):
+    def svd_decomposition(self,X):
         '''
-        Compute SVD decomposition using svd_comp components
+        Computes SVD decomposition of data X using the number components that 
+        gives a reconstruction error of 1e-2
         '''
-#        S = svd(X,full_matrices=False,compute_uv=False)
+        global svd_comp
+        S = svd(X,full_matrices=False,compute_uv=False)
 #        primer = S[0]
+#        
 #        plt.plot(S/primer)
 #        plt.yscale('log')
-        
-        svd_decomp = TruncatedSVD(n_components=svd_comp)
+        r=np.linalg.matrix_rank(X)
+        n_comp=r
+        for i in range(1,r):
+            err=np.sqrt(sum(map(lambda x:x*x,S[i:r])))/np.sqrt(sum(map(lambda x:x*x,S[0:i])))
+            if (err < 1e-2):
+                print("El error para ", i, " componentes es ", err)
+                n_comp=i
+                svd_comp=n_comp
+                break
+        svd_decomp = TruncatedSVD(n_components=n_comp)
         svd_decomp.fit(X)
         newX = svd_decomp.transform(X)
         
@@ -811,20 +833,20 @@ class spectrograms():
                 X.append(out.flatten())
                 shot_numbers.append(f[-9:-4])
                 
-            with open(filename+'.pkl', 'wb') as f:  #save variables
+            with open('reductions/'+filename+'.pkl', 'wb') as f:  #save variables
                 pickle.dump([model,X,shot_numbers], f)
 
         elif (action == 'load'):
             print('...Using saved data...')
-            with open(filename+'.pkl','rb') as f: # load saved specs
+            with open('reductions/'+filename+'.pkl','rb') as f: # load saved specs
                 [model,X,shot_numbers] = pickle.load(f)
             
         return (model, X, shot_numbers)
             
     def clean_cluster(self, cluster, cluster_size):
         '''
-        Function used to transform a clustering to its "canonical form". For example,
-        [3,3,2,3,2] is equivalent to [0,0,1,0,1]
+        Function used to transform a clustering to its "canonical form". 
+        For example, [3,3,2,3,2] is equivalent to [0,0,1,0,1]
         '''
         order_by_cluster = {}
         new_cluster=np.zeros((len(cluster),), dtype=int)
@@ -843,7 +865,7 @@ class spectrograms():
 
         return new_cluster
     
-    
+    # Functions used to compute rand index
     def check_clusterings(self,labels_true, labels_pred):
         """Check that the labels arrays are 1D and of same dimension.
     
@@ -890,8 +912,7 @@ class spectrograms():
         n_samples = np.int64(labels_true.shape[0])
     
         # Computation using the contingency data
-        contingency = contingency_matrix(labels_true, labels_pred, sparse=True, dtype=np.int64)
-        print(contingency)
+        contingency = contingency_matrix(labels_true, labels_pred, sparse=True)
         n_c = np.ravel(contingency.sum(axis=1))
         n_k = np.ravel(contingency.sum(axis=0))
         sum_squares = (contingency.data ** 2).sum()
@@ -918,32 +939,101 @@ class spectrograms():
             # cluster. These are perfect matches hence return 1.0.
             return 1.0
     
-        return numerator / denominator
-    
+        return round(numerator / denominator,3)
+    # End of functions used to compute rand index
 
-    def compare_saved_clusters(self, path1, path2, cluster_sizes):
+    def compare_saved_clusters(self, path1, path2, n_clusters):
         '''
         This function is used to compare two different clusterings using Rand index.
         These clusterings are saved in .npz files in different folders depending on
         the algorithm used.
+        Four versions of every clustering are compared.
         '''
-        for size in cluster_sizes:
-            subpath = '/Nc_'+str(size).zfill(2)+'_clusters/'
-            clusters1 = np.load(path1 + subpath + saving_clusters)
-            clusters2 = np.load(path2 + subpath + saving_clusters)
-            rand = self.rand_index(clusters1['arr_0'],clusters2['arr_0'])
-            print('Rand index when ' + str(size) + ' clusters: ' + str(round(rand,3)))
-            return rand # OJO: solo sirve si solo pongo un elemento en cluster_size
+        rands = []
+        str_cluster=str(n_clusters)
+        for i in range(4):
+            for j in range(4):
+                subpath1 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(i)+'/'
+                subpath2 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(j)+'/'
+                clusters1 = np.load(path1 + subpath1 + saving_clusters)
+                clusters2 = np.load(path2 + subpath2 + saving_clusters)
+                rands.append(self.rand_index(clusters1['arr_0'],clusters2['arr_0']))
+                return rands
 
 
-    def plot_rand_vs_pca(self,comps,rands,reduc):        
+    def plot_rand_vs_pca(self,comps,rands,reduc):  
+        '''
+        This function is used to compare different number of 
+        components used to compute PCA or SVD reduction with the rand 
+        indeces of the clustering made with that reduction vs no reduction
+        '''
         axes = plt.gca()
         axes.set_ylim([0.5,1])
         plt.plot(comps,rands)
         plt.xlabel('Number of components ' + reduc,fontsize=15)
         plt.ylabel('Rand index vs SOM no ' + reduc,fontsize=15)
+        
+    def compare_versions(self, versions_list,n_clusters):
+        '''
+        We use rand index to compare a list of different clusterings of the 
+        same data
+        '''
+        n_versions = len(versions_list)
+        rands_array = np.ones(n_versions*n_versions)
+        stdevs = np.ones(n_versions*n_versions)
+        for i in range(n_versions):
+            for j in range(n_versions):
+                 (mean,stdev)= self.mean_std(self.compare_saved_clusters(outfolder+'/'+versions_list[i],outfolder+'/'+versions_list[j],n_clusters))
+                 rands_array[i*n_versions+j]=mean
+                 stdevs[i*n_versions+j]=stdev
+        print(self.print_mean_std(rands_array.reshape((n_versions, n_versions)),stdevs.reshape((n_versions, n_versions)),n_versions))
 
-#####################################################################
+        fig, ax = plt.subplots(1)
+        plt.ylim(-0.5,n_versions+0.5)
+        plt.xlim(-0.5,n_versions+0.5)
+        cmap=plt.cm.RdYlBu_r
+        c=cmap(rands_array)
+        for i in range(n_versions):
+            for j in range(n_versions): 
+                rect=Rectangle((i,j), 1,1,facecolor=c[i*n_versions+j])
+                ax.add_patch(rect)
+                ax.annotate(str(rands_array[i*n_versions+j])+' +/- '+str(stdevs[i*n_versions+j]),xy=(i+0.4,j+0.5))
+                
+        for i in range(n_versions):
+            ax.annotate(versions_list[i],xy=(i+0.05,-0.2),fontsize=6)
+        for i in range(n_versions):
+            ax.annotate(versions_list[i],xy=(n_versions+0.1,i+0.9),fontsize=6,rotation=-90)
+        
+        normal = plt.Normalize(0,1)
+        cax, _ = cbar.make_axes(ax) 
+        cb2 = cbar.ColorbarBase(cax, cmap=cmap,norm=normal)
+        
+    def print_mean_std(self, means, stdevs, size):
+        '''
+        Given a matrix of means and a matrix of standard deviations, this 
+        function prints the matrix with both values in every component
+        ---
+        Example:
+            means  = [[1, 2],
+                     [2,  1]]
+            stdevs = [[0.1, 0.02],
+                     [0.7,  0.5]]
+            self.print_mean_std(means, stdevs, 2) = [[1 +/- 0.1, 2 +/- 0.02],
+                                                    [2 +/- 0.7,  1 +/- 0.5]]
+        '''
+        new_matrix = np.chararray((size,size))
+        for i in range(size):
+            for j in range(size):
+                new_matrix[i,j]=str(means[i][j]) + ' +/- ' + str(stdevs[i][j])
+        return new_matrix
+        
+        
+    def mean_std(self,rands):
+        '''
+        Returns a tuple with the mean and standard deviation of a given list of values
+        '''
+        return (round(np.mean(rands),3),round(np.std(rands),3))
+        
 
 #  Input parameters and execution.
 
@@ -956,11 +1046,11 @@ class spectrograms():
 # Takes some time to initialize the image encodings.
             
 # Parameters to define the folder name depending on the initialitation and wether
-# or not we use PCA 
+# or not we use PCA or SVD
 filename            = 'spectrograms'  
 initialitation      = 'random' # 'random' or 'pca'    
 pca_comp            = -1      # number of components of the pca, -1 if no PCA
-svd_comp            = -1      # number of components of the svd, -1 if no SVD
+svd_comp            = -1  #or 178    # number of components of the svd, -1 if no SVD
 ini_file            = ''
 pca_file            = 'noPCA'
 svd_file            = 'noSVD'
@@ -973,64 +1063,40 @@ if (svd_comp != -1):
 folder              = 'SOM_'+pca_file+svd_file+ini_file
 outfolder           = 'results_test_'+filename
 specs_folder        = filename
-
 heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'   
 saving_clusters     = 'clusters.npz' #file where the clustering will be saved
+action = 'load'        #'compute' or 'load' VGG embedding
+actionPCA = 'compute'  #'compute' or 'load' PCA reduction (if needed)
+actionSVD = 'compute'  #'compute' or 'load' SVD reduction (if needed)
 
-action = 'load' # 'compute' or 'load' VGG embedding
-actionPCA = 'load'
-actionSVD = 'compute'
-specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
-specs.num_clusters  =[15]
+# Clustering execution time begins
+#total_time = 0
+#start = timer()
+#specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
+#specs.num_clusters  =[10] 
 #specs.spec_som(folder)
+#end = timer()
+#total_time = (end - start)
+#print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
 
- #Now we do the work, clustering and/or applying PCA
-components = [100,200,500,1000,1500,2000,2500,3000,3500,4000,4500,5000,5500,6000,6500,7000,7500,8000,8500] #compute PCA before SOM using i components
-#components = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,4000,5000,6000,7000,8000]  #compute SVD before SOM using i components
-rand_indexes = []
-for i in components:
+
+
+
+ #Now we do the work, clustering and/or applying PCA/SVD
+
+# 4 executions of every version
+for j in range(4):
     total_time = 0
     start = timer()
-    pca_comp = -1      # number of components of the pca, -1 if no PCA
-    svd_comp = i      # number of components of the svd, -1 if no SVD
-    pca_file = 'noPCA'
-    svd_file = 'noSVD'
-    if (pca_comp != -1):
-        pca_file = 'PCA'+str(pca_comp)
-    if (svd_comp != -1):
-        svd_file = 'SVD'+str(svd_comp)
-    folder              = 'SOM_'+pca_file+svd_file+ini_file
-    outfolder           = 'results_test_'+filename
-    specs_folder        = filename
-    action = 'load' # 'compute' or 'load' VGG embedding
     specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
-    specs.num_clusters  = [15]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
+    specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
  
-    specs.spec_som(folder)
+    specs.spec_som(folder,n_it=j)
     end = timer()
     total_time += (end - start) 
     plt.close('all') 
     print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
-    
-    # Compute rand index using clusterings from paths 1 and 2
-    path1 = outfolder + '/SOM_noPCAnoSVD' #folder of the first clustering
-    path2 = outfolder + '/'+folder    #folder of the second clustering
-    rand_indexes.append(specs.compare_saved_clusters(path1,path2,specs.num_clusters))
-    
-print(rand_indexes)
-specs.rand_index([0,0,1,2],[0,0,1,1])
-'''
-specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp)
-#specs.num_clusters  =[4,6,8,10,14,20,26,32,38]
-specs.num_clusters  =[2,3,4,5,6,7,8]
-for i in specs.num_clusters:
 
-    
-    # Compute rand index using clusterings from paths 1 and 2
-    path1 = outfolder + '/Kmeans_noPCA' #folder of the first clustering
-    path2 = outfolder + '/SOM_noPCA'    #folder of the second clustering
-    specs.compare_saved_clusters(path1,path2,[i])
-'''
 plt.close('all') #to close all opened figures during the execution
 
 end = datetime.now()
@@ -1038,18 +1104,8 @@ end_time = end.strftime("%H:%M:%S")
 print("Start Time =", start_time)
 print("End Time =", end_time)
 
-randsPCA=[0.9483083140068463, 0.9585953631584444, 0.9469213776572589, 0.9498554728882233, 
-          0.9518433861025288, 0.9577383917401534, 0.9574855912379792, 0.9492440967863931, 
-          0.953402677427203, 0.9460997884052369, 0.9468019102309131, 0.9500608825812729, 
-          0.9510399212351877, 0.9603159664587958, 0.9539472012904562, 0.9541288660587669, 
-          0.9592331335144683, 0.9531018175935185, 0.9643422291874001] 
-randsSVD=[0.955360507134149, 0.9504852457357061, 0.9550956979891193, 0.950967200855669, 
-          0.9550802972141583, 0.9590796952468901, 0.9613483135829537, 0.9490124661597682, 
-          0.9488809158103019, 0.9459909182967099, 0.9481907035871278, 0.9524331961673959, 
-          0.9528889055936952, 0.9480089892986403, 0.9538034442174275, 0.9631848188569267, 
-          0.9485096630454047, 0.958673753598198, 0.943094483160144, 0.9543710692431222, 
-          0.958525193068027, 0.9479464453154384] 
-#specs.plot_rand_vs_pca(components,randsPCA,'PCA')
+
+specs.compare_versions(['SOM_noPCAnoSVD','SOM_noPCAnoSVDinitial'],10) 
 
 
 #specs.spec_kmeans('KMeans_noPCA')

@@ -8,12 +8,13 @@ Created: 1-27-21
 
 import numpy as np
 from sklearn.decomposition import PCA
+from copy import copy
 
 class SOM():
     """
     The 2-D, rectangular grid self-organizing map class using Numpy.
     """
-    def __init__(self, m=3, n=3, dim=3, lr=1, sigma=1, max_iter=3000):
+    def __init__(self, m=3, n=3, dim=3, lr=1, sigma=1, max_iter=180000):
         """
         Parameters
         ----------
@@ -42,6 +43,7 @@ class SOM():
         self.lr = lr
         self.sigma = sigma
         self.max_iter = max_iter
+        self.eps = 1e-3
 
         # Set after fitting
         self._inertia = None
@@ -103,7 +105,6 @@ class SOM():
         tmp_matrix = np.tile(me, (nnodes, 1))
 
         # Randomized PCA is scalable
-        #pca = RandomizedPCA(n_components=pca_components) # RandomizedPCA is deprecated.
         pca = PCA(n_components=pca_components, svd_solver='randomized')
 
         pca.fit(data)
@@ -206,11 +207,11 @@ class SOM():
         global_iter_counter = 0
         n_samples = len(X)
         total_iterations = np.minimum(epochs * n_samples, self.max_iter)
-
+        stop = False
         for epoch in range(epochs):
             # Break if past max number of iterations
-            if global_iter_counter > self.max_iter:
-                break
+            if global_iter_counter > self.max_iter or stop:
+                break 
 
             if shuffle:
                 indices = np.random.permutation(n_samples)
@@ -220,14 +221,16 @@ class SOM():
             # Train
             for idx in indices:
                 # Break if past max number of iterations
-                if global_iter_counter > self.max_iter:
+                if (global_iter_counter > self.max_iter or stop):
                     break
                 input = X[idx]
+                oldWeights = copy(self.weights)
                 # Do one step of training
                 self.step(input)
                 # Update learning rate
                 global_iter_counter += 1
                 self.lr = (1 - (global_iter_counter / total_iterations)) * self.initial_lr
+                stop = self._stop_iterations(oldWeights,self.weights,global_iter_counter)
 
         # Compute inertia
         inertia = np.sum(np.array([float(self._compute_point_intertia(x)) for x in X]))
@@ -238,8 +241,20 @@ class SOM():
 
         # Set trained flag
         self._trained = True
+        print ("Number of iterations: " + str(global_iter_counter))
 
         return
+    
+    def _stop_iterations(self,Xold,X,iters):
+        '''
+        If the diference between one iteration and the previous is below a tolerance,
+        stop iterating
+        '''
+        dif = np.sum(np.power(Xold-X, 2))
+        if (dif < self.eps):
+            print ("Difference beteen iterations: " + str(dif))
+            return True
+        return False
 
     def predict(self, X):
         """
