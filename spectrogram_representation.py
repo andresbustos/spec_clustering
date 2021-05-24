@@ -102,7 +102,7 @@ class spectrograms():
         # apply or not SVD
         elif (svd_comp > 1):
             if (actionSVD == 'compute'):
-                self.X=self.svd_decomposition(self.Xraw,svd_comp)
+                self.X=self.svd_decomposition(self.Xraw)
                 with open('reductions/'+filename+str(svd_comp)+'SVD.pkl', 'wb') as f:  #save variables
                     pickle.dump(self.X, f)
             else:
@@ -179,7 +179,10 @@ class spectrograms():
         for nc in self.num_clusters:
             print('Clustering in ' + str(nc) + ' clusters')
             alg      = sklearn.cluster.KMeans(n_clusters=nc, precompute_distances=True).fit(self.X)
+            self.kmeans = alg
             clusters = alg.predict(self.X)
+            clusters = self.clean_cluster(clusters,nc)
+            self.clusters = clusters
             inertias.append(alg.inertia_)
             df['Nc='+str(nc)] = clusters
             
@@ -260,11 +263,13 @@ class spectrograms():
             
             # Fit it to the data
             som.fit(self.X, epochs=20, initiate=initialitation)
+            self.som=som
             inertias.append(som._inertia_)
             
             # Assign each datapoint to its predicted cluster
             clusters = som.predict(self.X)
             clusters = self.clean_cluster(clusters,nc)
+            self.clusters = clusters
             
             df           = pd.DataFrame()
             df['shot']   = self.shot_numbers
@@ -308,7 +313,7 @@ class spectrograms():
                 plt.savefig(outpath)
                 plt.clf()
                 fig=None
-            plt.close('all') #to close all opened figures during the execution0
+            plt.close('all') #to close all opened figures during the execution
     
         self.save_shape_dict(outfolder, self.shape_dict)
         self.plot_elbow(inertias, outfolder)
@@ -334,6 +339,7 @@ class spectrograms():
             print('Clustering in ' + str(nc) + ' clusters')
             alg      = KMedoids(n_clusters=nc).fit(self.X)
             clusters = alg.predict(self.X)
+            clusters = self.clean_cluster(clusters,nc)
             inertias.append(alg.inertia_)
             df['Nc='+str(nc)] = clusters
             
@@ -476,6 +482,7 @@ class spectrograms():
         for nc in self.num_clusters:
             print('Clustering in ' + str(nc) + ' clusters')
             clusters      = AgglomerativeClustering(n_clusters=nc).fit_predict(self.X)
+            clusters = self.clean_cluster(clusters,nc)
 #            clusters = alg.predict(self.X)
             df['Nc='+str(nc)] = clusters
             
@@ -951,14 +958,14 @@ class spectrograms():
         '''
         rands = []
         str_cluster=str(n_clusters)
-        for i in range(4):
-            for j in range(4):
+        for i in range(n_iteraciones):
+            for j in range(n_iteraciones):
                 subpath1 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(i)+'/'
                 subpath2 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(j)+'/'
                 clusters1 = np.load(path1 + subpath1 + saving_clusters)
                 clusters2 = np.load(path2 + subpath2 + saving_clusters)
                 rands.append(self.rand_index(clusters1['arr_0'],clusters2['arr_0']))
-                return rands
+        return rands
 
 
     def plot_rand_vs_pca(self,comps,rands,reduc):  
@@ -973,7 +980,7 @@ class spectrograms():
         plt.xlabel('Number of components ' + reduc,fontsize=15)
         plt.ylabel('Rand index vs SOM no ' + reduc,fontsize=15)
         
-    def compare_versions(self, versions_list,n_clusters):
+    def compare_versions(self, versions_list, n_clusters):
         '''
         We use rand index to compare a list of different clusterings of the 
         same data
@@ -986,7 +993,7 @@ class spectrograms():
                  (mean,stdev)= self.mean_std(self.compare_saved_clusters(outfolder+'/'+versions_list[i],outfolder+'/'+versions_list[j],n_clusters))
                  rands_array[i*n_versions+j]=mean
                  stdevs[i*n_versions+j]=stdev
-        print(self.print_mean_std(rands_array.reshape((n_versions, n_versions)),stdevs.reshape((n_versions, n_versions)),n_versions))
+        self.print_mean_std(rands_array.reshape((n_versions, n_versions)),stdevs.reshape((n_versions, n_versions)),n_versions)
 
         fig, ax = plt.subplots(1)
         plt.ylim(-0.5,n_versions+0.5)
@@ -1008,6 +1015,27 @@ class spectrograms():
         cax, _ = cbar.make_axes(ax) 
         cb2 = cbar.ColorbarBase(cax, cmap=cmap,norm=normal)
         
+    def compare_one_method_versions(self, method_folder, n_clusters):
+        '''
+        We use rand index to compare a list of different clusterings of the 
+        same data
+        '''
+        rands_array = np.ones(n_iteraciones*n_iteraciones)
+        str_cluster=str(n_clusters)
+        for i in range(n_iteraciones):
+            line = []
+            for j in range(n_iteraciones):
+                subpath1 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(i)+'/'
+                subpath2 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(j)+'/'
+                clusters1 = np.load(outfolder+'/'+method_folder + subpath1 + saving_clusters)
+                clusters2 = np.load(outfolder+'/'+method_folder + subpath2 + saving_clusters)
+                rands_array[i*n_iteraciones+j]=self.rand_index(clusters1['arr_0'],clusters2['arr_0'])
+                line.append(rands_array[i*n_iteraciones+j])
+            print(line)
+            
+        mean, std = self.mean_std(rands_array)
+        print("media: ", mean, "+/-", std)
+        
     def print_mean_std(self, means, stdevs, size):
         '''
         Given a matrix of means and a matrix of standard deviations, this 
@@ -1021,11 +1049,12 @@ class spectrograms():
             self.print_mean_std(means, stdevs, 2) = [[1 +/- 0.1, 2 +/- 0.02],
                                                     [2 +/- 0.7,  1 +/- 0.5]]
         '''
-        new_matrix = np.chararray((size,size))
         for i in range(size):
+            line = []
             for j in range(size):
-                new_matrix[i,j]=str(means[i][j]) + ' +/- ' + str(stdevs[i][j])
-        return new_matrix
+
+                line.append(str(means[i][j]) + " +/- " + str(stdevs[i][j]))
+            print(line)
         
         
     def mean_std(self,rands):
@@ -1046,11 +1075,12 @@ class spectrograms():
 # Takes some time to initialize the image encodings.
             
 # Parameters to define the folder name depending on the initialitation and wether
-# or not we use PCA or SVD
-filename            = 'spectrograms'  
+# or not we use PCA or SVD?
+
+filename            = 'dataset_dummy'  
 initialitation      = 'random' # 'random' or 'pca'    
 pca_comp            = -1      # number of components of the pca, -1 if no PCA
-svd_comp            = -1  #or 178    # number of components of the svd, -1 if no SVD
+svd_comp            = 20  #or 178    # number of components of the svd, -1 if no SVD
 ini_file            = ''
 pca_file            = 'noPCA'
 svd_file            = 'noSVD'
@@ -1067,31 +1097,64 @@ heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'
 saving_clusters     = 'clusters.npz' #file where the clustering will be saved
 action = 'load'        #'compute' or 'load' VGG embedding
 actionPCA = 'compute'  #'compute' or 'load' PCA reduction (if needed)
-actionSVD = 'compute'  #'compute' or 'load' SVD reduction (if needed)
+actionSVD = 'load'  #'compute' or 'load' SVD reduction (if needed)
+n_iteraciones=6
 
 # Clustering execution time begins
 #total_time = 0
 #start = timer()
 #specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
 #specs.num_clusters  =[10] 
-#specs.spec_som(folder)
+#specs.spec_som(folder,1)
 #end = timer()
 #total_time = (end - start)
 #print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
 
 
+#specs.compare_versions(['SOM_noPCASVD178initial','SOM_noPCASVD178','KMeans_noPCASVD178','KMedoids_noPCASVD178','Agglomerative_noPCASVD178'],10) 
+#specs.compare_one_method_versions('KMeans_noPCASVD178',10)
 
 
  #Now we do the work, clustering and/or applying PCA/SVD
-
+'''
 # 4 executions of every version
-for j in range(4):
+for j in range(n_iteraciones):
+    total_time = 0
+    start = timer()
+#    specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
+#    specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
+ 
+    specs.spec_agglomerative(folder,n_it=j)
+    end = timer()
+    total_time += (end - start) 
+    plt.close('all') 
+    print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
+
+plt.close('all') #to close all opened figures during the execution
+folder              = 'KMedoids_'+pca_file+svd_file+ini_file
+
+for j in range(n_iteraciones):
     total_time = 0
     start = timer()
     specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
     specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
  
-    specs.spec_som(folder,n_it=j)
+    specs.spec_kmedoids(folder,n_it=4+j)
+    end = timer()
+    total_time += (end - start) 
+    plt.close('all') 
+    print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
+
+plt.close('all') #to close all opened figures during the execution
+folder              = 'Agglomerative_'+pca_file+svd_file+ini_file
+
+for j in range(n_iteraciones):
+    total_time = 0
+    start = timer()
+    specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
+    specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
+ 
+    specs.spec_agglomerative(folder,n_it=4+j)
     end = timer()
     total_time += (end - start) 
     plt.close('all') 
@@ -1105,7 +1168,7 @@ print("Start Time =", start_time)
 print("End Time =", end_time)
 
 
-specs.compare_versions(['SOM_noPCAnoSVD','SOM_noPCAnoSVDinitial'],10) 
+#specs.compare_versions(['SOM_noPCAnoSVD','SOM_noPCAnoSVDinitial'],10) 
 
 
 #specs.spec_kmeans('KMeans_noPCA')
@@ -1140,3 +1203,4 @@ specs.compare_versions(['SOM_noPCAnoSVD','SOM_noPCAnoSVDinitial'],10)
 # 
 # for n_pca in[4,8,16,32,64,128,256,512]:
 #     specs.apply_pca(n_pca)
+'''
