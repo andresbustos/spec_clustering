@@ -1080,7 +1080,7 @@ class spectrograms():
 filename            = 'dataset_dummy'  
 initialitation      = 'random' # 'random' or 'pca'    
 pca_comp            = -1      # number of components of the pca, -1 if no PCA
-svd_comp            = 20  #or 178    # number of components of the svd, -1 if no SVD
+svd_comp            = -1  #or 178    # number of components of the svd, -1 if no SVD
 ini_file            = ''
 pca_file            = 'noPCA'
 svd_file            = 'noSVD'
