@@ -1,0 +1,16 @@
+{
+ "filename":"dataset_dummy",
+ "initialitation":"random",
+ "pca_comp":-1,
+ "svd_comp":19,
+ "ini_file":"",
+ "pca_file":"noPCA",
+ "svd_file":"noSVD", 
+ "heat_type_file":"20200630_list_5000_with_NBI_scenario.csv",
+ "saving_clusters":"clusters.npz",
+ "saving_weights":"weights.npz",
+ "action":"compute",
+ "actionPCA":"load",
+ "actionSVD":"compute",
+ "n_iteraciones":4
+}

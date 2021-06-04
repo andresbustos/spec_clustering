@@ -42,6 +42,7 @@ from sklearn.utils.validation import check_array, check_consistent_length
 import warnings
 from sklearn.utils.multiclass import type_of_target
 from datetime import datetime
+import json
 
 start = datetime.now()
 start_time = start.strftime("%H:%M:%S")
@@ -53,11 +54,12 @@ class spectrograms():
     
     Performs clustering with several methods and writes output data.
     """
-    def __init__(self, outfolder, specs_folder, heat_type_file, pca_comp=-1, svd_comp=-1):
+    def __init__(self, outfolder, specs_folder, heat_type_file, par, pca_comp=-1, svd_comp=-1, search=False):
         
         self.outfolder    = outfolder
         self.specs_folder = specs_folder
         self.specs        = glob2.glob(os.path.join(self.specs_folder, '*png'))
+        self.params       = par
         
         if not os.path.exists(outfolder):
             os.mkdir(outfolder)            
@@ -76,7 +78,13 @@ class spectrograms():
         self.Xraw         = []
         self.shot_numbers = []#to save data in a dataframe
         
-        (model, self.Xraw, shot_numbers) = self.compute_or_load_VGG(model, action, filename)
+        (model, self.Xraw, shot_numbers) = self.compute_or_load_VGG(model, par['action'], filename, self.specs)
+        if (search):
+            with open(os.path.join('reductions','Vt'+filename+'_'+str(svd_comp)+'.pkl'),'rb') as f: # load saved specs
+                Vt = pickle.load(f)
+            self.X = np.dot(self.Xraw,Vt) 
+            return
+                
 #        for i, f in enumerate(self.specs):
 #            if (i %25==0):
 #                print('Encoding spectrograms: ', float(i)/len(self.specs)*100, ' %') 
@@ -89,25 +97,25 @@ class spectrograms():
 
         # apply or not PCA
         if (pca_comp > 1):
-            if (actionPCA == 'compute'):
+            if (par['actionPCA'] == 'compute'):
                 pca    = PCA(n_components=pca_comp)
                 pca.fit(self.Xraw)
                 self.X = pca.transform(self.Xraw)
-                with open('reductions/'+filename+str(pca_comp)+'PCA.pkl', 'wb') as f:  #save variables
+                with open(os.path.join('reductions',filename+str(len(self.specs))+'_'+str(pca_comp)+'PCA.pkl'), 'wb') as f:  #save variables
                     pickle.dump(self.X, f)
             else:
                 print('...Using saved data for PCA...')
-                with open('reductions/'+filename+str(pca_comp)+'PCA.pkl','rb') as f: # load saved specs
+                with open(os.path.join('reductions',filename+str(len(self.specs))+'_'+str(pca_comp)+'PCA.pkl'),'rb') as f: # load saved specs
                     self.X = pickle.load(f)
         # apply or not SVD
         elif (svd_comp > 1):
-            if (actionSVD == 'compute'):
+            if (par['actionSVD'] == 'compute'):
                 self.X=self.svd_decomposition(self.Xraw)
-                with open('reductions/'+filename+str(svd_comp)+'SVD.pkl', 'wb') as f:  #save variables
+                with open(os.path.join('reductions',filename+str(len(self.specs))+'_'+str(svd_comp)+'SVD.pkl'), 'wb') as f:  #save variables
                     pickle.dump(self.X, f)
             else:
                 print('...Using saved data for SVD...')
-                with open('reductions/'+filename+str(svd_comp)+'SVD.pkl','rb') as f: # load saved specs
+                with open(os.path.join('reductions',filename+str(len(self.specs))+'_'+str(svd_comp)+'SVD.pkl'),'rb') as f: # load saved specs
                     self.X = pickle.load(f)
         else:
             self.X = self.Xraw
@@ -130,7 +138,7 @@ class spectrograms():
         self.type = []         
         
         '''
-        df = pd.read_csv(heat_type_file, index_col='shot_WDIA')
+        df = pd.read_csv(par['heat_type_file'], index_col='shot_WDIA')
 
         for s in self.shot_numbers:
             s = int(float(s))
@@ -181,8 +189,8 @@ class spectrograms():
             alg      = sklearn.cluster.KMeans(n_clusters=nc, precompute_distances=True).fit(self.X)
             self.kmeans = alg
             clusters = alg.predict(self.X)
-            clusters = self.clean_cluster(clusters,nc)
             self.clusters = clusters
+            clusters = self.clean_cluster(clusters,nc)
             inertias.append(alg.inertia_)
             df['Nc='+str(nc)] = clusters
             
@@ -190,7 +198,7 @@ class spectrograms():
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
 
-            np.savez(dest_folder + '/' + saving_clusters, clusters)
+            np.savez(os.path.join(dest_folder, self.params['saving_clusters']), clusters)
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
             df['cluster'] = clusters
             df.sort_values(by='shot',inplace=True)                        
@@ -262,14 +270,14 @@ class spectrograms():
             som = SOM(m=1, n=nc, dim=self.X[0].shape[0])
             
             # Fit it to the data
-            som.fit(self.X, epochs=20, initiate=initialitation)
+            som.fit(self.X, epochs=50, initiate=self.params['initialitation'])
             self.som=som
             inertias.append(som._inertia_)
             
             # Assign each datapoint to its predicted cluster
             clusters = som.predict(self.X)
-            clusters = self.clean_cluster(clusters,nc)
             self.clusters = clusters
+            clusters = self.clean_cluster(clusters,nc)
             
             df           = pd.DataFrame()
             df['shot']   = self.shot_numbers
@@ -279,7 +287,8 @@ class spectrograms():
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
             
-            np.savez(dest_folder + '/' + saving_clusters, clusters)
+            np.savez(os.path.join(dest_folder, self.params['saving_clusters']), clusters)
+            np.savez(os.path.join(dest_folder, self.params['saving_weights']), self.som.weights)
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
             df['cluster'] = clusters
             df.sort_values(by='shot',inplace=True)                        
@@ -339,6 +348,7 @@ class spectrograms():
             print('Clustering in ' + str(nc) + ' clusters')
             alg      = KMedoids(n_clusters=nc).fit(self.X)
             clusters = alg.predict(self.X)
+            self.clusters = clusters
             clusters = self.clean_cluster(clusters,nc)
             inertias.append(alg.inertia_)
             df['Nc='+str(nc)] = clusters
@@ -347,7 +357,7 @@ class spectrograms():
             if not os.path.exists(dest_folder):
                 os.mkdir(dest_folder)
                 
-            np.savez(dest_folder + '/' + saving_clusters, clusters)
+            np.savez(os.path.join(dest_folder, self.params['saving_clusters']), clusters)
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
             df = pd.DataFrame(columns=['shot','cluster'])
             df['cluster'] = clusters
@@ -482,6 +492,7 @@ class spectrograms():
         for nc in self.num_clusters:
             print('Clustering in ' + str(nc) + ' clusters')
             clusters      = AgglomerativeClustering(n_clusters=nc).fit_predict(self.X)
+            self.clusters = clusters
             clusters = self.clean_cluster(clusters,nc)
 #            clusters = alg.predict(self.X)
             df['Nc='+str(nc)] = clusters
@@ -491,7 +502,7 @@ class spectrograms():
                 os.mkdir(dest_folder)
 
             self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
-            np.savez(dest_folder + '/' + saving_clusters, clusters)
+            np.savez(os.path.join(dest_folder, self.params['saving_clusters']), clusters)
             df['cluster'] = clusters
             df.sort_values(by='shot',inplace=True)                                        
             df.to_csv(os.path.join(dest_folder,'membership.csv'), index=None)
@@ -571,7 +582,6 @@ class spectrograms():
         if not os.path.exists(dest_folder):
             os.mkdir(dest_folder)
 
-        np.savez(dest_folder + '/' + saving_clusters, clusters)
         self.make_clustering_histogram(clusters, os.path.join(dest_folder,'cluster_size.png'))
         df['cluster'] = clusters
         df.sort_values(by='shot',inplace=True)                                        
@@ -800,12 +810,17 @@ class spectrograms():
         Computes SVD decomposition of data X using the number components that 
         gives a reconstruction error of 1e-2
         '''
-        global svd_comp
-        S = svd(X,full_matrices=False,compute_uv=False)
+        svd_comp = self.params['svd_comp']
+        [U,S,V] = svd(X,full_matrices=False,compute_uv=True)
+        with open(os.path.join('reductions','Vt'+filename+'_'+str(svd_comp)+'.pkl'), 'wb') as f:  
+            pickle.dump(np.transpose(V), f) #Saving V to use it to project images
+            
 #        primer = S[0]
-#        
 #        plt.plot(S/primer)
-#        plt.yscale('log')
+#        plt.yscale('log')        
+#        plt.xlabel('Number of singular values', size=9)        
+#        plt.ylabel('Error', size=9)
+        
         r=np.linalg.matrix_rank(X)
         n_comp=r
         for i in range(1,r):
@@ -822,7 +837,7 @@ class spectrograms():
         return newX
         
             
-    def compute_or_load_VGG(self, model, action, filename):
+    def compute_or_load_VGG(self, model, action, filename, specs):
         '''
         Depending on the action input ('compute' or 'load'), a VGG embedding is
         computed and saved or loaded. The filename for saving or loading is also
@@ -831,21 +846,21 @@ class spectrograms():
         X = []
         shot_numbers = []
         if (action == 'compute'):
-            for i, f in enumerate(self.specs):
+            for i, f in enumerate(specs):
                 if (i %25==0):
-                    print('Encoding spectrograms: ', float(i)/len(self.specs)*100, ' %') 
+                    print('Encoding spectrograms: ', float(i)/len(specs)*100, ' %') 
                 img = np.array([cv2.imread(f)])[0]/255.
                 img = cv2.resize( img, (model.input_shape[2], model.input_shape[1]), interpolation=cv2.INTER_NEAREST)
                 out = model.predict_on_batch([[img]])[0]
                 X.append(out.flatten())
                 shot_numbers.append(f[-9:-4])
                 
-            with open('reductions/'+filename+'.pkl', 'wb') as f:  #save variables
+            with open(os.path.join('reductions',filename+str(len(specs))+'.pkl'), 'wb') as f:  #save variables
                 pickle.dump([model,X,shot_numbers], f)
 
         elif (action == 'load'):
             print('...Using saved data...')
-            with open('reductions/'+filename+'.pkl','rb') as f: # load saved specs
+            with open(os.path.join('reductions',filename+str(len(specs))+'.pkl'),'rb') as f: # load saved specs
                 [model,X,shot_numbers] = pickle.load(f)
             
         return (model, X, shot_numbers)
@@ -872,7 +887,7 @@ class spectrograms():
 
         return new_cluster
     
-    # Functions used to compute rand index
+    ### Functions used to compute rand index
     def check_clusterings(self,labels_true, labels_pred):
         """Check that the labels arrays are 1D and of same dimension.
     
@@ -947,7 +962,7 @@ class spectrograms():
             return 1.0
     
         return round(numerator / denominator,3)
-    # End of functions used to compute rand index
+    ### End of functions used to compute rand index
 
     def compare_saved_clusters(self, path1, path2, n_clusters):
         '''
@@ -958,12 +973,12 @@ class spectrograms():
         '''
         rands = []
         str_cluster=str(n_clusters)
-        for i in range(n_iteraciones):
-            for j in range(n_iteraciones):
-                subpath1 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(i)+'/'
-                subpath2 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(j)+'/'
-                clusters1 = np.load(path1 + subpath1 + saving_clusters)
-                clusters2 = np.load(path2 + subpath2 + saving_clusters)
+        for i in range(self.params['n_iteraciones']):
+            for j in range(self.params['n_iteraciones']):
+                subpath1 = 'Nc_'+str_cluster.zfill(2)+'_clusters'+str(i)
+                subpath2 = 'Nc_'+str_cluster.zfill(2)+'_clusters'+str(j)
+                clusters1 = np.load(os.path.join(path1, subpath1, self.params['saving_clusters']))
+                clusters2 = np.load(os.path.join(path2, subpath2, self.params['saving_clusters']))
                 rands.append(self.rand_index(clusters1['arr_0'],clusters2['arr_0']))
         return rands
 
@@ -986,51 +1001,51 @@ class spectrograms():
         same data
         '''
         n_versions = len(versions_list)
-        rands_array = np.ones(n_versions*n_versions)
-        stdevs = np.ones(n_versions*n_versions)
+        means = np.ones([n_versions,n_versions])
+        stdevs = np.ones([n_versions,n_versions])
         for i in range(n_versions):
             for j in range(n_versions):
-                 (mean,stdev)= self.mean_std(self.compare_saved_clusters(outfolder+'/'+versions_list[i],outfolder+'/'+versions_list[j],n_clusters))
-                 rands_array[i*n_versions+j]=mean
-                 stdevs[i*n_versions+j]=stdev
-        self.print_mean_std(rands_array.reshape((n_versions, n_versions)),stdevs.reshape((n_versions, n_versions)),n_versions)
+                 (means[i][j],stdevs[i][j])= self.mean_std(self.compare_saved_clusters(
+                         os.path.join(outfolder,versions_list[i]),os.path.join(outfolder,versions_list[j]),n_clusters))
+        self.print_mean_std(means,stdevs,n_versions)
 
-        fig, ax = plt.subplots(1)
-        plt.ylim(-0.5,n_versions+0.5)
-        plt.xlim(-0.5,n_versions+0.5)
-        cmap=plt.cm.RdYlBu_r
-        c=cmap(rands_array)
-        for i in range(n_versions):
-            for j in range(n_versions): 
-                rect=Rectangle((i,j), 1,1,facecolor=c[i*n_versions+j])
-                ax.add_patch(rect)
-                ax.annotate(str(rands_array[i*n_versions+j])+' +/- '+str(stdevs[i*n_versions+j]),xy=(i+0.4,j+0.5))
-                
-        for i in range(n_versions):
-            ax.annotate(versions_list[i],xy=(i+0.05,-0.2),fontsize=6)
-        for i in range(n_versions):
-            ax.annotate(versions_list[i],xy=(n_versions+0.1,i+0.9),fontsize=6,rotation=-90)
-        
-        normal = plt.Normalize(0,1)
-        cax, _ = cbar.make_axes(ax) 
-        cb2 = cbar.ColorbarBase(cax, cmap=cmap,norm=normal)
+#        fig, ax = plt.subplots(1)
+#        plt.ylim(-0.5,n_versions+0.5)
+#        plt.xlim(-0.5,n_versions+0.5)
+#        cmap=plt.cm.RdYlBu_r
+#        c=cmap(means)
+#        for i in range(n_versions):
+#            for j in range(n_versions): 
+#                rect=Rectangle((i,j), 1,1,facecolor=c[i][j])
+#                ax.add_patch(rect)
+#                ax.annotate(str(means[i][j])+' +/- '+str(stdevs[i][j]),xy=(i+0.4,j+0.5))
+#                
+#        for i in range(n_versions):
+#            ax.annotate(versions_list[i],xy=(i+0.05,-0.2),fontsize=6)
+#        for i in range(n_versions):
+#            ax.annotate(versions_list[i],xy=(n_versions+0.1,i+0.9),fontsize=6,rotation=-90)
+#        
+#        normal = plt.Normalize(0,1)
+#        cax, _ = cbar.make_axes(ax) 
+#        cb2 = cbar.ColorbarBase(cax, cmap=cmap,norm=normal)
         
     def compare_one_method_versions(self, method_folder, n_clusters):
         '''
         We use rand index to compare a list of different clusterings of the 
         same data
         '''
-        rands_array = np.ones(n_iteraciones*n_iteraciones)
+        n_it=self.params['n_iteraciones']
+        rands_array = np.ones(n_it*n_it)
         str_cluster=str(n_clusters)
-        for i in range(n_iteraciones):
+        for i in range(n_it):
             line = []
-            for j in range(n_iteraciones):
-                subpath1 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(i)+'/'
-                subpath2 = '/Nc_'+str_cluster.zfill(2)+'_clusters'+str(j)+'/'
-                clusters1 = np.load(outfolder+'/'+method_folder + subpath1 + saving_clusters)
-                clusters2 = np.load(outfolder+'/'+method_folder + subpath2 + saving_clusters)
-                rands_array[i*n_iteraciones+j]=self.rand_index(clusters1['arr_0'],clusters2['arr_0'])
-                line.append(rands_array[i*n_iteraciones+j])
+            for j in range(n_it):
+                subpath1 = 'Nc_'+str_cluster.zfill(2)+'_clusters'+str(i)
+                subpath2 = 'Nc_'+str_cluster.zfill(2)+'_clusters'+str(j)
+                clusters1 = np.load(os.path.join(outfolder,method_folder,subpath1,self.params['saving_clusters']))
+                clusters2 = np.load(os.path.join(outfolder,method_folder,subpath2,self.params['saving_clusters']))
+                rands_array[i*n_it+j]=self.rand_index(clusters1['arr_0'],clusters2['arr_0'])
+                line.append(rands_array[i*n_it+j])
             print(line)
             
         mean, std = self.mean_std(rands_array)
@@ -1042,18 +1057,19 @@ class spectrograms():
         function prints the matrix with both values in every component
         ---
         Example:
-            means  = [[1, 2],
-                     [2,  1]]
-            stdevs = [[0.1, 0.02],
-                     [0.7,  0.5]]
-            self.print_mean_std(means, stdevs, 2) = [[1 +/- 0.1, 2 +/- 0.02],
-                                                    [2 +/- 0.7,  1 +/- 0.5]]
+            means  = [[0.950, 0.97],
+                     [0.88,  0.711]]
+            stdevs = [[0.12, 0.02],
+                     [0.11,  0.005]]
+            self.print_mean_std(means, stdevs, 2) = [[0.950(12), 0.97(2)],
+                                                    [0.88(11),    0.711(5)]]
         '''
         for i in range(size):
             line = []
             for j in range(size):
-
-                line.append(str(means[i][j]) + " +/- " + str(stdevs[i][j]))
+                dec=len(str(stdevs[i][j]))
+                std=stdevs[i][j]*10**(dec-2)
+                line.append(str(format(means[i][j], '.'+str(len(str(stdevs[i][j]))-2)+'f')) + "(" + str(int(std)) + ")")
             print(line)
         
         
@@ -1061,7 +1077,23 @@ class spectrograms():
         '''
         Returns a tuple with the mean and standard deviation of a given list of values
         '''
-        return (round(np.mean(rands),3),round(np.std(rands),3))
+        std = str(float('%.1g' % np.std(rands)))
+        if (std[-1]=='1'):
+            std = str(float('%.2g' % np.std(rands)))
+        return (round(np.mean(rands),len(std)-2),std)
+    
+    
+
+def read_parameters(parname):
+    '''
+    Used to read parameters stored in a JSON file
+    '''
+    with open(parname,'rt') as f:
+        p=json.load(f)
+    return p
+
+#def compare_cluster_sizes(path1,path2);
+
         
 
 #  Input parameters and execution.
@@ -1076,35 +1108,31 @@ class spectrograms():
             
 # Parameters to define the folder name depending on the initialitation and wether
 # or not we use PCA or SVD?
+par=read_parameters("params.json")
 
-filename            = 'dataset_dummy'  
-initialitation      = 'random' # 'random' or 'pca'    
-pca_comp            = -1      # number of components of the pca, -1 if no PCA
-svd_comp            = -1  #or 178    # number of components of the svd, -1 if no SVD
-ini_file            = ''
-pca_file            = 'noPCA'
-svd_file            = 'noSVD'
-if (initialitation == 'pca'):
+filename            = par['filename']  
+pca_comp            = par['pca_comp']      # number of components of the pca, -1 if no PCA
+svd_comp            = par['svd_comp']  #or 178    # number of components of the svd, -1 if no SVD
+ini_file            = par['ini_file']
+pca_file            = par['pca_file']
+svd_file            = par['svd_file']
+
+if (par['initialitation'] == 'pca'):
     ini_file = 'initial'
 if (pca_comp != -1):
     pca_file = 'PCA'+str(pca_comp)
 if (svd_comp != -1):
     svd_file = 'SVD'+str(svd_comp)
+    
 folder              = 'SOM_'+pca_file+svd_file+ini_file
 outfolder           = 'results_test_'+filename
 specs_folder        = filename
-heat_type_file      = '20200630_list_5000_with_NBI_scenario.csv'   
-saving_clusters     = 'clusters.npz' #file where the clustering will be saved
-action = 'load'        #'compute' or 'load' VGG embedding
-actionPCA = 'compute'  #'compute' or 'load' PCA reduction (if needed)
-actionSVD = 'load'  #'compute' or 'load' SVD reduction (if needed)
-n_iteraciones=6
 
 # Clustering execution time begins
 #total_time = 0
 #start = timer()
-#specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
-#specs.num_clusters  =[10] 
+#specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, pca_comp, svd_comp)
+#specs.num_clusters  =[2] 
 #specs.spec_som(folder,1)
 #end = timer()
 #total_time = (end - start)
@@ -1118,10 +1146,10 @@ n_iteraciones=6
  #Now we do the work, clustering and/or applying PCA/SVD
 '''
 # 4 executions of every version
-for j in range(n_iteraciones):
+for j in range(par['n_iteraciones']):
     total_time = 0
     start = timer()
-#    specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
+#    specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], pca_comp,svd_comp)
 #    specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
  
     specs.spec_agglomerative(folder,n_it=j)
@@ -1132,33 +1160,6 @@ for j in range(n_iteraciones):
 
 plt.close('all') #to close all opened figures during the execution
 folder              = 'KMedoids_'+pca_file+svd_file+ini_file
-
-for j in range(n_iteraciones):
-    total_time = 0
-    start = timer()
-    specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
-    specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
- 
-    specs.spec_kmedoids(folder,n_it=4+j)
-    end = timer()
-    total_time += (end - start) 
-    plt.close('all') 
-    print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
-
-plt.close('all') #to close all opened figures during the execution
-folder              = 'Agglomerative_'+pca_file+svd_file+ini_file
-
-for j in range(n_iteraciones):
-    total_time = 0
-    start = timer()
-    specs               = spectrograms(outfolder, specs_folder, heat_type_file, pca_comp,svd_comp)
-    specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
- 
-    specs.spec_agglomerative(folder,n_it=4+j)
-    end = timer()
-    total_time += (end - start) 
-    plt.close('all') 
-    print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
 
 plt.close('all') #to close all opened figures during the execution
 

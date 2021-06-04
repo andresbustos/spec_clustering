@@ -252,7 +252,6 @@ class SOM():
         '''
         dif = np.sum(np.power(Xold-X, 2))
         if (dif < self.eps):
-            print ("Difference beteen iterations: " + str(dif))
             return True
         return False
 
