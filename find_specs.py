@@ -10,7 +10,7 @@ from copy import copy
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
-import os, cv2, json, pickle
+import os, cv2, json, glob2
 from networks import *
 
 def plot_similars(spec_id,specs_by_distance,search_file):
@@ -63,77 +63,8 @@ def read_parameters(parname):
     with open(parname,'rt') as f:
         p=json.load(f)
     return p
-
-def new_image(spec_id):
-    '''
-    When the image is not in the trained data, we use this function to asign
-    a cluster to it and look for the closest (most similar) spectrograms 
-    '''
-    search_file='para_pruebas_dummy'
-    par['action'] = 'compute'
-    specs_new = spectrograms(outfolder, search_file, par['heat_type_file'], par, pca_comp,svd_comp,True)
-    path_specs=copy(specs.specs)
-    img_specs=list(map(lambda x: int(x.split('\\')[1].split('.')[0]),path_specs)) # para el dataset_dummy
-#    img_specs=list(map(lambda x: int(x.split('_')[1].split('.')[0]),path_specs)) # para el dataset de espectrogramas
-
-    cluster = specs.som.predict([specs_new.X[0]])[0]   
     
-    # Elements in the same cluster as spec_id
-    cluster_elements = []
-    for i in range(len(specs.clusters)):
-        if (specs.clusters[i]==cluster):
-            cluster_elements.append(img_specs[i])
-    
-    #Compute distance to images to order by similarity 
-    distance_dict = {}
-    for i in cluster_elements:
-        distance_dict[i] = np.linalg.norm(specs_new.X[0] - specs.X[img_specs.index(i)], axis=0)
-    
-    distance_dict_order=dict(sorted(distance_dict.items(), key=lambda item: item[1]))
-    print("Dictionary ordered by distance",distance_dict_order)                        
-    specs_by_distance = list(distance_dict_order.keys())
-    plot_similars(spec_id,specs_by_distance,search_file)
-
-def trained_image(spec_id):
-    '''
-    When the image is in the trained data, we use this function to asign
-    a cluster to it and look for the closest (most similar) spectrograms 
-    '''
-    path_specs=copy(specs.specs)
-    img_specs=list(map(lambda x: int(x.split('\\')[1].split('.')[0]),path_specs)) # para el dataset_dummy
-#    img_specs=list(map(lambda x: int(x.split('_')[1].split('.')[0]),path_specs)) # para el dataset de espectrogramas
-
-    position = 0
-    cluster = []
-    if (spec_id not in img_specs):
-        raise Exception("The image is not in the dataset")
-    
-    position = img_specs.index(spec_id)
-    cluster = specs.som.predict([specs.X[position]])[0]
-
-    # Elements in the same cluster as spec_id
-    cluster_elements = []
-    for i in range(len(specs.clusters)):
-        if (specs.clusters[i]==cluster):
-            cluster_elements.append(img_specs[i])
-            
-    
-    #Compute distance to images to order by similarity 
-    distance_dict = {}
-    for i in cluster_elements:
-        distance_dict[i] = np.linalg.norm(specs.X[position] - specs.X[img_specs.index(i)], axis=0)
-    
-    distance_dict_order=dict(sorted(distance_dict.items(), key=lambda item: item[1]))
-    print("Dictionary ordered by distance",distance_dict_order)                        
-    specs_by_distance = list(distance_dict_order.keys())
-    
-    plot_similars(spec_id,specs_by_distance,filename)
-    
-#print("Indica el numero del espectrograma a comparar")
-
-spec_ids = 1 #int(input())
-is_it_trained = False
-#spec_id_list = [44584,39710,33282,29807] # para el dataset de espectrogramas
+#spec_ids = [44584,39710,33282,29807] # para el dataset de espectrogramas
 
 ########## Prepare parameters for execution ########## 
 par=read_parameters("params.json")
@@ -161,11 +92,48 @@ specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'
 specs.num_clusters  =[2] 
 specs.spec_som(folder,1) 
 
+path_specs=copy(specs.specs)
+img_specs=list(map(lambda x: int(x.split('\\')[1].split('.')[0]),path_specs)) # para el dataset_dummy
+#    img_specs=list(map(lambda x: int(x.split('_')[1].split('.')[0]),path_specs)) # para el dataset de espectrogramas
+
+path_search = glob2.glob(os.path.join(par["path_search"], '*png'))
+img_search=list(map(lambda x: int(x.split('\\')[1].split('.')[0]),path_search))
+#    img_specs=list(map(lambda x: int(x.split('_')[1].split('.')[0]),path_search)) # para el dataset de espectrogramas
+
 ### Choose what to do with the search image
-if (is_it_trained):
-    for spec in spec_ids:
-        trained_image(spec)
-else:
-    new_image(spec_ids)
+for spec in img_search:
+
+    if (spec not in img_specs):
+        if (spec not in img_search):
+            raise Exception("The image is not in the dataset")
+        else:
+            position = img_search.index(spec)
+            search_file='para_pruebas_dummy'
+            par['action'] = 'compute'
+            specs_new = spectrograms(outfolder, search_file, par['heat_type_file'], par, pca_comp,svd_comp,True)
+            img = specs_new.X[img_search.index(spec)]
+    else:
+        position = img_specs.index(spec)
+        img = specs.X[position]
+        
+    cluster = specs.som.predict([img])[0]
+
+    # Elements in the same cluster as spec_id
+    cluster_elements = []
+    for i in range(len(specs.clusters)):
+        if (specs.clusters[i]==cluster):
+            cluster_elements.append(img_specs[i])
+            
+    
+    #Compute distance to images to order by similarity 
+    distance_dict = {}
+    for i in cluster_elements:
+        distance_dict[i] = np.linalg.norm(img - specs.X[img_specs.index(i)], axis=0)
+    
+    distance_dict_order=dict(sorted(distance_dict.items(), key=lambda item: item[1]))
+    print("Dictionary ordered by distance",distance_dict_order)                        
+    specs_by_distance = list(distance_dict_order.keys())
+    
+    plot_similars(spec,specs_by_distance,par["path_search"])
     
 plt.close('all')
