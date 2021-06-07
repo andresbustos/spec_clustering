@@ -76,17 +76,8 @@ def new_image(spec_id):
     img_specs=list(map(lambda x: int(x.split('\\')[1].split('.')[0]),path_specs)) # para el dataset_dummy
 #    img_specs=list(map(lambda x: int(x.split('_')[1].split('.')[0]),path_specs)) # para el dataset de espectrogramas
 
+    cluster = specs.som.predict([specs_new.X[0]])[0]   
     
-    with open(os.path.join('reductions',filename+'19.pkl'),'rb') as f: # load saved specs
-        [_,Xog0,_] = pickle.load(f)
-    print(np.linalg.norm(Xog0[0] - specs_new.Xraw[0], axis=0))
-    
-    with open(os.path.join('reductions',filename+str(svd_comp)+'SVD.pkl'),'rb') as f: # load saved specs
-        Xog = pickle.load(f)
-    print(Xog[0])
-    print(np.linalg.norm(Xog[4] - specs_new.X[0], axis=0))
-    cluster = specs.som.predict([specs_new.X[0]])[0]    
-
     # Elements in the same cluster as spec_id
     cluster_elements = []
     for i in range(len(specs.clusters)):
@@ -135,6 +126,7 @@ def trained_image(spec_id):
     distance_dict_order=dict(sorted(distance_dict.items(), key=lambda item: item[1]))
     print("Dictionary ordered by distance",distance_dict_order)                        
     specs_by_distance = list(distance_dict_order.keys())
+    
     plot_similars(spec_id,specs_by_distance,filename)
     
 #print("Indica el numero del espectrograma a comparar")
@@ -176,7 +168,4 @@ if (is_it_trained):
 else:
     new_image(spec_ids)
     
-
-
-#    plot_similars(spec_id)
 plt.close('all')

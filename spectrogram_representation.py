@@ -78,10 +78,12 @@ class spectrograms():
         self.Xraw         = []
         self.shot_numbers = []#to save data in a dataframe
         
-        (model, self.Xraw, shot_numbers) = self.compute_or_load_VGG(model, par['action'], filename, self.specs)
+        (model, self.Xraw, self.shot_numbers) = self.compute_or_load_VGG(model, par['action'], filename, self.specs)
         if (search):
             with open(os.path.join('reductions','Vt'+filename+'_'+str(svd_comp)+'.pkl'),'rb') as f: # load saved specs
-                Vt = pickle.load(f)
+                Vt = pickle.load(f)            
+#            with open(os.path.join('reductions','Vt'+filename+'_20.pkl'),'rb') as f: # load saved specs
+#                Vt20 = pickle.load(f)
             self.X = np.dot(self.Xraw,Vt) 
             return
                 
@@ -124,7 +126,7 @@ class spectrograms():
         print('Dimensions of the image encoding: ', self.Xraw[0].shape)        
 
         
-        #self.X_embedded   = TSNE(n_components=2).fit_transform(self.X)  #2D embedding
+        self.X_embedded   = TSNE(n_components=2).fit_transform(self.X)  #2D embedding
         self.num_clusters = [1,2,3,4,6,8,10,12,16,20,24,28,32,36,40]
 
         #To make multiplots in a w*w grid
@@ -137,12 +139,12 @@ class spectrograms():
                 'No NBI plasma. No AE':'s'}        
         self.type = []         
         
-        '''
+        '''  
         df = pd.read_csv(par['heat_type_file'], index_col='shot_WDIA')
 
         for s in self.shot_numbers:
             s = int(float(s))
-            self.type.append(df.loc[s]['NBI scenario 2'])
+            self.type.append(df.loc[s]['NBI scenario'])
        
 
         plt.figure(dpi=200)
@@ -324,6 +326,15 @@ class spectrograms():
                 fig=None
             plt.close('all') #to close all opened figures during the execution
     
+#            shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
+#            fig = plt.figure(dpi=200)
+#            for i,x in enumerate(self.X_embedded):
+#                plt.scatter(x[0], x[1],  c=[cmap(norm(clusters[i]))], alpha=0.65, marker=shapes[i])
+#            plt.title('Nc = ' + str(nc))
+#            plt.savefig(os.path.join(dest_folder,'tSNE_SOM_'+str(nc).zfill(3)+'.png'))
+#            plt.clf()    
+#            fig = None
+        
         self.save_shape_dict(outfolder, self.shape_dict)
         self.plot_elbow(inertias, outfolder)
         
@@ -825,7 +836,7 @@ class spectrograms():
         n_comp=r
         for i in range(1,r):
             err=np.sqrt(sum(map(lambda x:x*x,S[i:r])))/np.sqrt(sum(map(lambda x:x*x,S[0:i])))
-            if (err < 1e-2):
+            if (err < 1e-3):
                 print("El error para ", i, " componentes es ", err)
                 n_comp=i
                 svd_comp=n_comp
@@ -1132,7 +1143,7 @@ specs_folder        = filename
 #total_time = 0
 #start = timer()
 #specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, pca_comp, svd_comp)
-#specs.num_clusters  =[2] 
+#specs.num_clusters  =[10] 
 #specs.spec_som(folder,1)
 #end = timer()
 #total_time = (end - start)
