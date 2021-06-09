@@ -80,11 +80,11 @@ class spectrograms():
         
         (model, self.Xraw, self.shot_numbers) = self.compute_or_load_VGG(model, par['action'], filename, self.specs)
         if (search):
-            with open(os.path.join('reductions','Vt'+filename+'_'+str(svd_comp)+'.pkl'),'rb') as f: # load saved specs
-                Vt = pickle.load(f)            
+            with open(os.path.join('reductions','SVD'+filename+'_'+str(svd_comp)+'.pkl'),'rb') as f: # load saved specs
+                svd = pickle.load(f)            
 #            with open(os.path.join('reductions','Vt'+filename+'_20.pkl'),'rb') as f: # load saved specs
 #                Vt20 = pickle.load(f)
-            self.X = np.dot(self.Xraw,Vt) 
+            self.X  = svd.transform(self.Xraw)
             return
                 
 #        for i, f in enumerate(self.specs):
@@ -133,20 +133,22 @@ class spectrograms():
         self.w = 5
 
         #for future plots except for graphs, which have another names
-        self.shape_dict = {'ECH+both injectors':'D', 'ECH+NBI1':'^',
-                'ECH+NBI2':'v','Both NBI start-up':'o',
-                'NBI1 start-up':'*','NBI2 start-up':'+', 
-                'No NBI plasma. No AE':'s'}        
+        self.shape_dict = {'ECH followed by both  injectors. Longer NBI2':'D', 'ECH followed by NBI1':'^',
+                'ECH followed by NBI2':'v','ECH followed by both  injectors. Longer NBI1':'o',
+                'ECH followed by both  injectors. Same length':'*','NBI1 start-up followed by NBI2':'+', 
+                'NBI1 start-up':'s', 'both NBI start-up. Longer NBI2': '1', 'both NBI start-up. Longer NBI1' : 'x', 
+                'NBI2 start-up' : 'p', 'NBI2 start-up followed by NBI1' : 'h', 'NBI1 start-up followed by ECH':'H',
+                'NBI2 start-up followed by ECH':'d','NBI2 start-up followed by NBI1 and ECH':'X'}        
         self.type = []         
-        
-        '''  
+         
         df = pd.read_csv(par['heat_type_file'], index_col='shot_WDIA')
 
         for s in self.shot_numbers:
             s = int(float(s))
             self.type.append(df.loc[s]['NBI scenario'])
        
-
+ 
+        '''
         plt.figure(dpi=200)
         plt.subplots_adjust(left = 0.1, right = 0.95, bottom = 0.35, top = 0.9, wspace = -0.1, hspace=0.2)
         plt.title('Heating mode histogram')
@@ -236,7 +238,6 @@ class spectrograms():
                 fig=None
             
             #for each cluster, make a summary plot of w*w spectrograms
-            '''
             shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
             fig = plt.figure(dpi=200)
             for i,x in enumerate(self.X_embedded):
@@ -245,7 +246,6 @@ class spectrograms():
             plt.savefig(os.path.join(dest_folder,'tSNE_Kmeans_'+str(nc).zfill(3)+'.png'))
             plt.clf()    
             fig = None
-            '''
             
         self.save_shape_dict(outfolder, self.shape_dict)
         
@@ -326,14 +326,14 @@ class spectrograms():
                 fig=None
             plt.close('all') #to close all opened figures during the execution
     
-#            shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
-#            fig = plt.figure(dpi=200)
-#            for i,x in enumerate(self.X_embedded):
-#                plt.scatter(x[0], x[1],  c=[cmap(norm(clusters[i]))], alpha=0.65, marker=shapes[i])
-#            plt.title('Nc = ' + str(nc))
-#            plt.savefig(os.path.join(dest_folder,'tSNE_SOM_'+str(nc).zfill(3)+'.png'))
-#            plt.clf()    
-#            fig = None
+            shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
+            fig = plt.figure(dpi=200)
+            for i,x in enumerate(self.X_embedded):
+                plt.scatter(x[0], x[1],  c=[cmap(norm(clusters[i]))], alpha=0.65, marker=shapes[i])
+            plt.title('Nc = ' + str(nc))
+            plt.savefig(os.path.join(dest_folder,'tSNE_SOM_'+str(nc).zfill(3)+'.png'))
+            plt.clf()    
+            fig = None
         
         self.save_shape_dict(outfolder, self.shape_dict)
         self.plot_elbow(inertias, outfolder)
@@ -413,7 +413,6 @@ class spectrograms():
             
             
             #for each cluster, make a summary plot of w*w spectrograms
-            '''
             shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
             cmap = plt.get_cmap('rainbow')
             norm = Normalize(vmin=0, vmax=max(clusters))
@@ -423,7 +422,6 @@ class spectrograms():
             plt.title('Nc = ' + str(nc))
             plt.savefig(os.path.join(dest_folder,'tSNE_Kmedoids_'+str(nc).zfill(3)+'.png'))
             plt.clf()        
-            '''
         self.save_shape_dict(outfolder, self.shape_dict)
 
         self.plot_elbow(inertias, outfolder)
@@ -554,7 +552,6 @@ class spectrograms():
 #            plt.clf()
             
             #for each cluster, make a summary plot of w*w spectrograms
-            '''
             shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
             cmap = plt.get_cmap('rainbow')
             norm = Normalize(vmin=0, vmax=max(clusters))
@@ -566,7 +563,6 @@ class spectrograms():
             plt.clf()        
             plt.cla()
             fig=None
-            '''
         self.save_shape_dict(outfolder, self.shape_dict)
 
 
@@ -823,8 +819,7 @@ class spectrograms():
         '''
         svd_comp = self.params['svd_comp']
         [U,S,V] = svd(X,full_matrices=False,compute_uv=True)
-        with open(os.path.join('reductions','Vt'+filename+'_'+str(svd_comp)+'.pkl'), 'wb') as f:  
-            pickle.dump(np.transpose(V), f) #Saving V to use it to project images
+
             
 #        primer = S[0]
 #        plt.plot(S/primer)
@@ -844,6 +839,9 @@ class spectrograms():
         svd_decomp = TruncatedSVD(n_components=n_comp)
         svd_decomp.fit(X)
         newX = svd_decomp.transform(X)
+        
+        with open(os.path.join('reductions','SVD'+filename+'_'+str(svd_comp)+'.pkl'), 'wb') as f:  
+            pickle.dump(svd_decomp, f) #Saving V to use it to project images
         
         return newX
         
@@ -1142,13 +1140,15 @@ specs_folder        = filename
 # Clustering execution time begins
 #total_time = 0
 #start = timer()
-#specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, pca_comp, svd_comp)
-#specs.num_clusters  =[10] 
-#specs.spec_som(folder,1)
+specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, pca_comp, svd_comp)
+specs.num_clusters  =[2,4,6,8,10,15,20,30,40] 
+specs.spec_som(folder,1)
 #end = timer()
 #total_time = (end - start)
 #print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
 
+#with open(os.path.join('reductions','specs_'+filename+'_'+svd_file+'.pkl'), 'wb') as f:  #save variables
+#    pickle.dump(specs, f)
 
 #specs.compare_versions(['SOM_noPCASVD178initial','SOM_noPCASVD178','KMeans_noPCASVD178','KMedoids_noPCASVD178','Agglomerative_noPCASVD178'],10) 
 #specs.compare_one_method_versions('KMeans_noPCASVD178',10)
