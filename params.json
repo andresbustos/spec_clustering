@@ -1,16 +1,17 @@
 {
- "filename":"dataset_dummy",
+ "filename":"spectrograms",
  "initialitation":"random",
  "pca_comp":-1,
- "svd_comp":19,
+ "svd_comp":178,
  "ini_file":"",
  "pca_file":"noPCA",
  "svd_file":"noSVD", 
- "heat_type_file":"20200630_list_5000_with_NBI_scenario.csv",
+ "heat_type_file":"20200503-1202_n23795_50473_NBI2010-2020_tWDIA.csv",
  "saving_clusters":"clusters.npz",
  "saving_weights":"weights.npz",
- "action":"compute",
+ "action":"load",
  "actionPCA":"load",
- "actionSVD":"compute",
- "n_iteraciones":4
+ "actionSVD":"load",
+ "n_iteraciones":6,
+ "path_search":"search_specs"
 }

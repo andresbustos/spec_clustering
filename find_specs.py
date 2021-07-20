@@ -42,7 +42,6 @@ def plot_similars(spec_id,specs_by_distance,search_file):
         fig.add_subplot(specs.w, specs.w, i+1)
         plt.rc('font', size=6)   
         plt.axis('off')
-#        file = os.path.join(filename,str(specs_by_distance[i-1]).zfill(3)+'.png')
         file = os.path.join(filename,specs_by_distance[i-1]+'.png') # para el dataset de espectrogramas
         img =  np.array([cv2.imread(file)])[0]
         img = cv2.resize( img, (specs.model.input_shape[2], specs.model.input_shape[1]), interpolation=cv2.INTER_NEAREST)
@@ -50,7 +49,7 @@ def plot_similars(spec_id,specs_by_distance,search_file):
         plt.imshow(img, cmap='ocean')
         plt.title('#'+''.join(list(filter(lambda x: (x.isdigit()),specs_by_distance[i-1]))), pad=1)
 
-    outpath = os.path.join(os.path.join(outfolder, 'similar_specs'+spec_num+'.png') )
+    outpath = os.path.join(os.path.join(outfolder, 'similar_specs_'+spec_num+'.png') )
     plt.savefig(outpath)
     plt.clf()
     fig=None
@@ -62,8 +61,7 @@ def read_parameters(parname):
     with open(parname,'rt') as f:
         p=json.load(f)
     return p
-    
-#spec_ids = [44584,39710,33282,29807] # para el dataset de espectrogramas
+
 
 ########## Prepare parameters for execution ########## 
 par=read_parameters("params.json")
@@ -91,8 +89,9 @@ specs_folder        = filename
 if (os.path.isfile(os.path.join('reductions','specs_'+filename+'_'+svd_file+'.pkl'))):
     with open(os.path.join('reductions','specs_'+filename+'_'+str(svd_file)+'.pkl'),'rb') as f: 
         specs = pickle.load(f)
+
 else:
-    print("Can't find file with spectrograms object, it will be created and the clustering will be made ¿?")
+    print("Can't find file with spectrograms object, it will be created")
     specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, pca_comp,svd_comp)
     specs.num_clusters  =[10] 
     specs.spec_som(folder,1) 
@@ -100,7 +99,18 @@ else:
         pickle.dump(specs, f)
 
 path_specs=copy(specs.specs)
-img_specs=list(map(lambda x: x.split('\\')[1].split('.')[0],path_specs)) 
+img_specs=list(map(lambda x: x.split('\\')[1].split('.')[0],path_specs))
+ 
+path_specs_now=glob2.glob(os.path.join(filename, '*png'))
+img_specs=list(map(lambda x: x.split('\\')[1].split('.')[0],path_specs_now)) 
+
+if (path_specs!=path_specs_now):
+    print("The object stored is not correct, a new one will be created")
+    specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, pca_comp,svd_comp)
+    specs.num_clusters  =[10] 
+    specs.spec_som(folder,1) 
+    with open(os.path.join('reductions','specs_'+filename+'_'+svd_file+'.pkl'), 'wb') as f:
+        pickle.dump(specs, f)
 
 path_search = glob2.glob(os.path.join(par["path_search"], '*png'))
 img_search=list(map(lambda x: x.split('\\')[1].split('.')[0],path_search))
@@ -108,13 +118,13 @@ img_search=list(map(lambda x: x.split('\\')[1].split('.')[0],path_search))
 if (img_search == []):
     raise Exception("The search folder is empty, introduce at least one image")
 
-# To compute images embedding and reduction if needed
-par['action'] = 'compute'
-specs_new = spectrograms(outfolder, par["path_search"], par['heat_type_file'], par, pca_comp,svd_comp,True)
-
 ### Search image cluster and order images in that cluster by distance
 for spec in img_search:
     if (spec not in img_specs):
+        # To compute images embedding and reduction if needed
+        par['action'] = 'compute'
+        specs_new = spectrograms(outfolder, par["path_search"], par['heat_type_file'], par, pca_comp,svd_comp,True)
+
         position = img_search.index(spec)
         img = specs_new.X[img_search.index(spec)]
     else:

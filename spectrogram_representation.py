@@ -124,21 +124,28 @@ class spectrograms():
 
         print('\nDimensions of the model input: ', model.input_shape[2]* model.input_shape[1]*model.input_shape[3])
         print('Dimensions of the image encoding: ', self.Xraw[0].shape)        
-
         
+
         self.X_embedded   = TSNE(n_components=2).fit_transform(self.X)  #2D embedding
-        self.num_clusters = [1,2,3,4,6,8,10,12,16,20,24,28,32,36,40]
+#        self.num_clusters = [1,2,3,4,6,8,10,12,16,20,24,28,32,36,40]
 
         #To make multiplots in a w*w grid
         self.w = 5
 
+       
         #for future plots except for graphs, which have another names
-        self.shape_dict = {'ECH followed by both  injectors. Longer NBI2':'D', 'ECH followed by NBI1':'^',
-                'ECH followed by NBI2':'v','ECH followed by both  injectors. Longer NBI1':'o',
-                'ECH followed by both  injectors. Same length':'*','NBI1 start-up followed by NBI2':'+', 
-                'NBI1 start-up':'s', 'both NBI start-up. Longer NBI2': '1', 'both NBI start-up. Longer NBI1' : 'x', 
-                'NBI2 start-up' : 'p', 'NBI2 start-up followed by NBI1' : 'h', 'NBI1 start-up followed by ECH':'H',
-                'NBI2 start-up followed by ECH':'d','NBI2 start-up followed by NBI1 and ECH':'X'}        
+#        self.shape_dict = {'ECH followed by both  injectors. Longer NBI2':'D', 'ECH followed by NBI1':'^',
+#                'ECH followed by NBI2':'v','ECH followed by both  injectors. Longer NBI1':'o',
+#                'ECH followed by both  injectors. Same length':'*','NBI1 start-up followed by NBI2':'+', 
+#                'NBI1 start-up':'s', 'both NBI start-up. Longer NBI2': '1', 'both NBI start-up. Longer NBI1' : 'x', 
+#                'NBI2 start-up' : 'p', 'NBI2 start-up followed by NBI1' : 'h', 'NBI1 start-up followed by ECH':'H',
+#                'NBI2 start-up followed by ECH':'d','NBI2 start-up followed by NBI1 and ECH':'X'}        
+        self.shape_dict = {'ECH followed by both  injectors. Longer NBI2':'o', 'ECH followed by NBI1':'o',
+                'ECH followed by NBI2':'o','ECH followed by both  injectors. Longer NBI1':'o',
+                'ECH followed by both  injectors. Same length':'o','NBI1 start-up followed by NBI2':'o', 
+                'NBI1 start-up':'o', 'both NBI start-up. Longer NBI2': 'o', 'both NBI start-up. Longer NBI1' : 'o', 
+                'NBI2 start-up' : 'o', 'NBI2 start-up followed by NBI1' : 'o', 'NBI1 start-up followed by ECH':'o',
+                'NBI2 start-up followed by ECH':'o','NBI2 start-up followed by NBI1 and ECH':'o'}        
         self.type = []         
          
         df = pd.read_csv(par['heat_type_file'], index_col='shot_WDIA')
@@ -147,7 +154,6 @@ class spectrograms():
             s = int(float(s))
             self.type.append(df.loc[s]['NBI scenario'])
        
- 
         '''
         plt.figure(dpi=200)
         plt.subplots_adjust(left = 0.1, right = 0.95, bottom = 0.35, top = 0.9, wspace = -0.1, hspace=0.2)
@@ -325,12 +331,15 @@ class spectrograms():
                 plt.clf()
                 fig=None
             plt.close('all') #to close all opened figures during the execution
-    
+#            self.heating_method_connection(clusters, nc)
+            
             shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
             fig = plt.figure(dpi=200)
             for i,x in enumerate(self.X_embedded):
                 plt.scatter(x[0], x[1],  c=[cmap(norm(clusters[i]))], alpha=0.65, marker=shapes[i])
-            plt.title('Nc = ' + str(nc))
+            plt.title('Nc = ' + str(nc),fontsize=16)
+            plt.xticks(fontsize=14)
+            plt.yticks(fontsize=14)
             plt.savefig(os.path.join(dest_folder,'tSNE_SOM_'+str(nc).zfill(3)+'.png'))
             plt.clf()    
             fig = None
@@ -413,16 +422,16 @@ class spectrograms():
             
             
             #for each cluster, make a summary plot of w*w spectrograms
-            shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
-            cmap = plt.get_cmap('rainbow')
-            norm = Normalize(vmin=0, vmax=max(clusters))
-            fig = plt.figure(dpi=200)
-            for i,x in enumerate(self.X_embedded):
-                plt.scatter(x[0], x[1],  c=[cmap(norm(clusters[i]))], alpha=0.65, marker=shapes[i])
-            plt.title('Nc = ' + str(nc))
-            plt.savefig(os.path.join(dest_folder,'tSNE_Kmedoids_'+str(nc).zfill(3)+'.png'))
-            plt.clf()        
-        self.save_shape_dict(outfolder, self.shape_dict)
+#            shapes  = [self.shape_dict[self.type[i]] for i in range(len(self.X))]
+#            cmap = plt.get_cmap('rainbow')
+#            norm = Normalize(vmin=0, vmax=max(clusters))
+#            fig = plt.figure(dpi=200)
+#            for i,x in enumerate(self.X_embedded):
+#                plt.scatter(x[0], x[1],  c=[cmap(norm(clusters[i]))], alpha=0.65, marker=shapes[i])
+#            plt.title('Nc = ' + str(nc))
+#            plt.savefig(os.path.join(dest_folder,'tSNE_Kmedoids_'+str(nc).zfill(3)+'.png'))
+#            plt.clf()        
+#        self.save_shape_dict(outfolder, self.shape_dict)
 
         self.plot_elbow(inertias, outfolder)
     
@@ -437,8 +446,8 @@ class spectrograms():
         """
         fig = plt.figure(dpi=200)
         plt.plot(self.num_clusters, inertias, 'o-')    
-        plt.xlabel('number of clusters')
-        plt.ylabel('inertia')
+        plt.xlabel('Número de clústeres',fontsize=15)
+        plt.ylabel('Inercia', fontsize=15)
         plt.savefig(os.path.join(outfolder, 'elbow_method.png'))
         plt.clf()
         fig = None
@@ -817,15 +826,19 @@ class spectrograms():
         Computes SVD decomposition of data X using the number components that 
         gives a reconstruction error of 1e-2
         '''
-        svd_comp = self.params['svd_comp']
-        [U,S,V] = svd(X,full_matrices=False,compute_uv=True)
-
-            
+#        svd_comp = self.params['svd_comp']
+#        [U,S,V] = svd(X,full_matrices=False,compute_uv=True)
+        with open(os.path.join('reductions','USV'+filename+'_'+str(178)+'.pkl'), 'rb') as f:  
+            [U,S,V] = pickle.load(f)
+        
+        # To plot singular values
 #        primer = S[0]
 #        plt.plot(S/primer)
 #        plt.yscale('log')        
-#        plt.xlabel('Number of singular values', size=9)        
-#        plt.ylabel('Error', size=9)
+#        plt.xlabel('i', size=12)        
+#        plt.ylabel(r'$\sigma_i/\sigma_1$', size=12)
+#        plt.xticks(fontsize=12)
+#        plt.yticks(fontsize=12)
         
         r=np.linalg.matrix_rank(X)
         n_comp=r
@@ -834,13 +847,13 @@ class spectrograms():
             if (err < 1e-3):
                 print("El error para ", i, " componentes es ", err)
                 n_comp=i
-                svd_comp=n_comp
+                self.params["svd_comp"] = n_comp
                 break
         svd_decomp = TruncatedSVD(n_components=n_comp)
         svd_decomp.fit(X)
         newX = svd_decomp.transform(X)
         
-        with open(os.path.join('reductions','SVD'+filename+'_'+str(svd_comp)+'.pkl'), 'wb') as f:  
+        with open(os.path.join('reductions','SVD'+filename+'_'+str(2)+'.pkl'), 'wb') as f:  
             pickle.dump(svd_decomp, f) #Saving V to use it to project images
         
         return newX
@@ -872,7 +885,7 @@ class spectrograms():
             with open(os.path.join('reductions',filename+str(len(specs))+'.pkl'),'rb') as f: # load saved specs
                 [model,X,shot_numbers] = pickle.load(f)
             
-        return (model, X, shot_numbers)
+        return (model, np.array(X), shot_numbers)
             
     def clean_cluster(self, cluster, cluster_size):
         '''
@@ -992,17 +1005,19 @@ class spectrograms():
         return rands
 
 
-    def plot_rand_vs_pca(self,comps,rands,reduc):  
+    def plot_rand_vs_reduc(self,comps,rands,reduc):  
         '''
         This function is used to compare different number of 
         components used to compute PCA or SVD reduction with the rand 
         indeces of the clustering made with that reduction vs no reduction
         '''
         axes = plt.gca()
-        axes.set_ylim([0.5,1])
-        plt.plot(comps,rands)
-        plt.xlabel('Number of components ' + reduc,fontsize=15)
-        plt.ylabel('Rand index vs SOM no ' + reduc,fontsize=15)
+        axes.set_ylim([0.75,1])
+        plt.plot(comps,rands,'-o')
+        plt.xlabel('Número de componentes ' + reduc,fontsize=12)
+        plt.ylabel('Indice de Rand',fontsize=12)
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
         
     def compare_versions(self, versions_list, n_clusters):
         '''
@@ -1015,29 +1030,10 @@ class spectrograms():
         for i in range(n_versions):
             for j in range(n_versions):
                  (means[i][j],stdevs[i][j])= self.mean_std(self.compare_saved_clusters(
-                         os.path.join(outfolder,versions_list[i]),os.path.join(outfolder,versions_list[j]),n_clusters))
+                         os.path.join(outfolder,versions_list[i]),os.path.join(
+                                 outfolder,versions_list[j]),n_clusters))
         self.print_mean_std(means,stdevs,n_versions)
-
-#        fig, ax = plt.subplots(1)
-#        plt.ylim(-0.5,n_versions+0.5)
-#        plt.xlim(-0.5,n_versions+0.5)
-#        cmap=plt.cm.RdYlBu_r
-#        c=cmap(means)
-#        for i in range(n_versions):
-#            for j in range(n_versions): 
-#                rect=Rectangle((i,j), 1,1,facecolor=c[i][j])
-#                ax.add_patch(rect)
-#                ax.annotate(str(means[i][j])+' +/- '+str(stdevs[i][j]),xy=(i+0.4,j+0.5))
-#                
-#        for i in range(n_versions):
-#            ax.annotate(versions_list[i],xy=(i+0.05,-0.2),fontsize=6)
-#        for i in range(n_versions):
-#            ax.annotate(versions_list[i],xy=(n_versions+0.1,i+0.9),fontsize=6,rotation=-90)
-#        
-#        normal = plt.Normalize(0,1)
-#        cax, _ = cbar.make_axes(ax) 
-#        cb2 = cbar.ColorbarBase(cax, cmap=cmap,norm=normal)
-        
+       
     def compare_one_method_versions(self, method_folder, n_clusters):
         '''
         We use rand index to compare a list of different clusterings of the 
@@ -1086,13 +1082,96 @@ class spectrograms():
         '''
         Returns a tuple with the mean and standard deviation of a given list of values
         '''
-        std = str(float('%.1g' % np.std(rands)))
+        rands_filter = list(filter(lambda x: (x != 1.0), rands)) 
+        
+        std = str(float('%.1g' % np.std(rands_filter)))
         if (std[-1]=='1'):
-            std = str(float('%.2g' % np.std(rands)))
-        return (round(np.mean(rands),len(std)-2),std)
+            std = str(float('%.2g' % np.std(rands_filter)))
+            
+        return (round(np.mean(rands_filter),len(std)-2),std)
     
-    
+    ### Functions used to make the heating types graph
+    def heating_method_connection(self, clusters, nc, folder):
+        '''
+        Creates a graphic with the different heating methods used in each
+        cluster. It includes a chart with the amount of heating methods per
+        cluster
+        '''
+        data = self.count_heating_types(clusters)
+        data = np.array(data).transpose()
+        
+        columns = np.arange(nc)
+        rows = list(self.shape_dict.keys())[::-1]
+        
+        value_increment = 1000
+        
+        # Get some pastel shades for the colors
+        colors = plt.cm.terrain(np.linspace(0, 0.5, len(rows)))
+        n_rows = len(data)
+        
+        index = np.arange(len(columns)) + 0.3
+        bar_width = 0.4
+        
+        # Initialize the vertical-offset for the stacked bar chart.
+        y_offset = np.zeros(len(columns))
+        
+        # Plot bars and create text labels for the table
+        fig, ax = plt.subplots(dpi=150)
+        fig.set_size_inches(10, 5)
+        ax.get_xaxis().set_visible(False)
+        for row in range(n_rows):
+            ax.bar(index, data[row], bar_width, bottom=y_offset, color=colors[row])
+            y_offset = y_offset + data[row]
+        # Reverse colors and text labels to display the last value at the top.
+        colors = colors[::-1]
+        
+        # Add a table at the bottom of the axes
+        ax.table(cellText=data[::-1],
+                              rowLabels=rows,
+                              rowColours=colors,
+                              colLabels=columns,
+                              loc='bottom')
+        
+        # Adjust layout to make room for the table:
+        fig.subplots_adjust(left=0.3, bottom=0.4)
+        
+        plt.ylabel("Heating method quantity".format(value_increment))
+        plt.title('Type of heating method per cluster')
+        
+        plt.show()
+        
+        plt.savefig(os.path.join(folder, 'heating_method_'+str(nc)+'_clusters.png'))
 
+    def count_heating_types(self, clusters):
+        '''
+        Counts the amount of spectrograms of every heating method in all 
+        clusters
+        '''
+        cluster_dict = {}
+        clusters= self.clusters
+        for i in range(len(clusters)):
+            if (clusters[i] in cluster_dict):
+                cluster_dict[clusters[i]].append(i)
+            else:
+                cluster_dict[clusters[i]] = [i]                
+        heat_types = []
+        for key in cluster_dict.keys():
+            heat_types_temp = []
+            for value in cluster_dict[key]:
+                heat_types_temp.append(self.type[value])  
+            heat_types.append(self.count_types_in_array(heat_types_temp))
+        return heat_types 
+                
+    def count_types_in_array(self, heat_array):
+        '''
+        Counts the amount of spectrograms of every heating method in an array
+        '''
+        count = []
+        for heat_method in self.shape_dict.keys():
+            count.append(heat_array.count(heat_method))
+        return count
+    ### End of functions used to make the heating types graph
+    
 def read_parameters(parname):
     '''
     Used to read parameters stored in a JSON file
@@ -1119,70 +1198,29 @@ def read_parameters(parname):
 # or not we use PCA or SVD?
 par=read_parameters("params.json")
 
-filename            = par['filename']  
-pca_comp            = par['pca_comp']      # number of components of the pca, -1 if no PCA
-svd_comp            = par['svd_comp']  #or 178    # number of components of the svd, -1 if no SVD
-ini_file            = par['ini_file']
-pca_file            = par['pca_file']
-svd_file            = par['svd_file']
-
 if (par['initialitation'] == 'pca'):
-    ini_file = 'initial'
-if (pca_comp != -1):
-    pca_file = 'PCA'+str(pca_comp)
-if (svd_comp != -1):
-    svd_file = 'SVD'+str(svd_comp)
+    par['ini_file'] = 'initial'
+if (par['pca_comp'] != -1):
+    par['pca_file'] = 'PCA'+str(par['pca_comp'])
+if (par['svd_comp'] != -1):
+    par['svd_file'] = 'SVD'+str(par['svd_comp'])
     
-folder              = 'SOM_'+pca_file+svd_file+ini_file
-outfolder           = 'results_test_'+filename
-specs_folder        = filename
+folder              = 'SOM_'+par['pca_file']+par['svd_file']+par['ini_file']
+outfolder           = 'results_test_'+par['filename']
+specs_folder        = par['filename']
 
 # Clustering execution time begins
-#total_time = 0
-#start = timer()
-specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, pca_comp, svd_comp)
-specs.num_clusters  =[2,4,6,8,10,15,20,30,40] 
+total_time = 0
+start = timer()
+specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], par, par['pca_comp'], par['svd_comp'])
+specs.num_clusters  =[10] 
 specs.spec_som(folder,1)
-#end = timer()
-#total_time = (end - start)
-#print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
-
-#with open(os.path.join('reductions','specs_'+filename+'_'+svd_file+'.pkl'), 'wb') as f:  #save variables
-#    pickle.dump(specs, f)
-
-#specs.compare_versions(['SOM_noPCASVD178initial','SOM_noPCASVD178','KMeans_noPCASVD178','KMedoids_noPCASVD178','Agglomerative_noPCASVD178'],10) 
-#specs.compare_one_method_versions('KMeans_noPCASVD178',10)
+end = timer()
+total_time = (end - start)
+print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
 
 
- #Now we do the work, clustering and/or applying PCA/SVD
 '''
-# 4 executions of every version
-for j in range(par['n_iteraciones']):
-    total_time = 0
-    start = timer()
-#    specs               = spectrograms(outfolder, specs_folder, par['heat_type_file'], pca_comp,svd_comp)
-#    specs.num_clusters  = [10]#2,3,4,5,6,7,8,10,12,16,20,24,28,32,36,40,44,48,52,56,60,64]
- 
-    specs.spec_agglomerative(folder,n_it=j)
-    end = timer()
-    total_time += (end - start) 
-    plt.close('all') 
-    print("Execution time " + folder + ": " + str(floor(total_time/60)) + " min " + str(floor(total_time%60)) + " s")
-
-plt.close('all') #to close all opened figures during the execution
-folder              = 'KMedoids_'+pca_file+svd_file+ini_file
-
-plt.close('all') #to close all opened figures during the execution
-
-end = datetime.now()
-end_time = end.strftime("%H:%M:%S")
-print("Start Time =", start_time)
-print("End Time =", end_time)
-
-
-#specs.compare_versions(['SOM_noPCAnoSVD','SOM_noPCAnoSVDinitial'],10) 
-
-
 #specs.spec_kmeans('KMeans_noPCA')
 # specs.spec_kmedoids('KMedoids_noPCA')
 # specs.spec_agglomerative('Agglomerative_noPCA')
